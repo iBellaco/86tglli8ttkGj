@@ -1,0 +1,6 @@
+{
+  "name": "Nova TV Launcher",
+  "description": "Lanzador avanzado para Android TV con organización por pestañas, ocultación de apps, widgets dinámicos, control por voz y optimización de energía.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,25 @@
+<resources>
+    <string name="app_name">Nova TV Launcher</string>
+    <string name="nav_home">Inicio</string>
+    <string name="nav_apps">Aplicaciones</string>
+    <string name="nav_categories">Pestañas</string>
+    <string name="nav_hidden">Ocultas</string>
+    <string name="nav_widgets">Widgets</string>
+    <string name="nav_cloud">Sincronización</string>
+    <string name="nav_settings">Ajustes</string>
+    <string name="voice_search">Búsqueda por Voz</string>
+    <string name="voice_listening">Escuchando comando de voz…</string>
+    <string name="voice_prompt">Di el nombre de una app o acción (ej: \'Abrir Netflix\', \'Modo Noche\')</string>
+    <string name="tab_all">Todas</string>
+    <string name="tab_favorites">Favoritos</string>
+    <string name="tab_streaming">Streaming</string>
+    <string name="tab_games">Juegos</string>
+    <string name="tab_tools">Herramientas</string>
+    <string name="tab_music">Música y Audio</string>
+    <string name="hide_app">Ocultar app</string>
+    <string name="unhide_app">Mostrar app</string>
+    <string name="pin_app">Fijar en acceso rápido</string>
+    <string name="unpin_app">Desfijar de acceso rápido</string>
+    <string name="energy_saver">Modo Ultra Eficiencia</string>
+    <string name="night_mode">Modo Oscuro Automático</string>
+</resources>
