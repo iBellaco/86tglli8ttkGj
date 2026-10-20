@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -91,51 +92,86 @@ fun TvTopBar(
         }
     }
 
-    Row(
+    Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 24.dp, vertical = 10.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 24.dp, vertical = 8.dp)
     ) {
-        // Left side: Brand Logo + Clock & Date + Large Weather Widget + Conditional Alerts
+        // 1. Top row: Logo + Hora & Fecha a la izquierda, Ahorro + Configuración a la derecha
         Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(14.dp)
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.primaryContainer,
-                modifier = Modifier.size(46.dp)
+            // Left side: Brand Logo + Clock & Date
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                Box(contentAlignment = Alignment.Center) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier.size(46.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            text = "TV",
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 17.sp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+
+                Column {
                     Text(
-                        text = "TV",
+                        text = currentTimeString.ifEmpty { "8:30 PM" },
+                        fontSize = 28.sp,
                         fontWeight = FontWeight.ExtraBold,
-                        fontSize = 17.sp,
-                        color = MaterialTheme.colorScheme.primary
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    Text(
+                        text = currentDateString.ifEmpty { "Lunes, 20 de octubre de 2026" },
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
 
-            Column {
-                Text(
-                    text = currentTimeString.ifEmpty { "8:30 PM" },
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = MaterialTheme.colorScheme.onBackground
+            // Right side: Quick Action Buttons (Energy Profile + Configuration / Ranura Cog)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // Energy Profile Chip
+                TvHeaderActionButton(
+                    icon = Icons.Default.PowerSettingsNew,
+                    label = energyProfile.title,
+                    tint = if (energyProfile == EnergyProfile.ULTRA_SAVER) TvEnergySaverGreen else TvCyanAccent,
+                    onClick = onEnergyProfileClick,
+                    testTag = "energy_profile_button"
                 )
-                Text(
-                    text = currentDateString.ifEmpty { "Lunes, 20 de octubre de 2026" },
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+
+                // Settings Button (Icono de la Ranura / Configuración)
+                TvHeaderIconButton(
+                    icon = Icons.Default.Settings,
+                    contentDesc = "Configuración",
+                    onClick = onSettingsClick,
+                    highlight = true,
+                    testTag = "settings_top_button"
                 )
             }
+        }
 
-            Spacer(modifier = Modifier.width(4.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
-            // Large, highly readable Weather Card: Temp Actual, Hoy Mín/Máx, Mañana Mín/Máx
+        // 2. Abajo de la hora: Clima con probabilidad de lluvia para hoy y mañana + Alertas
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // Large, highly readable Weather Card: Temp Actual, Hoy Mín/Máx y Lluvia, Mañana Mín/Máx y Lluvia
             Surface(
                 shape = RoundedCornerShape(16.dp),
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
@@ -146,20 +182,20 @@ fun TvTopBar(
                     .testTag("weather_card")
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Icon(
                         imageVector = if (weather.isRainAlertActive) Icons.Default.WaterDrop else Icons.Default.WbSunny,
                         contentDescription = "Clima",
                         tint = if (weather.isRainAlertActive) Color(0xFF38BDF8) else Color(0xFFFBBF24),
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier.size(34.dp)
                     )
                     Column {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Text(
                                 text = "${weather.currentTemp}°C",
@@ -173,42 +209,78 @@ fun TvTopBar(
                                 fontWeight = FontWeight.SemiBold,
                                 color = TvCyanAccent
                             )
+                        }
+                        // Pronóstico de Hoy con probabilidad de lluvia
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = "Hoy: Mín ${weather.todayMin}° • Máx ${weather.todayMax}°",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                             Surface(
-                                shape = RoundedCornerShape(8.dp),
+                                shape = RoundedCornerShape(6.dp),
                                 color = Color(0xFF0284C7).copy(alpha = 0.22f),
                                 border = androidx.compose.foundation.BorderStroke(0.5.dp, Color(0xFF38BDF8).copy(alpha = 0.5f))
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
+                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp),
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(2.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.WaterDrop,
-                                        contentDescription = "Probabilidad de lluvia",
+                                        contentDescription = "Probabilidad de lluvia hoy",
                                         tint = Color(0xFF38BDF8),
-                                        modifier = Modifier.size(11.dp)
+                                        modifier = Modifier.size(10.dp)
                                     )
                                     Text(
                                         text = "${weather.rainProbabilityPercent}% lluvia",
-                                        fontSize = 10.5.sp,
+                                        fontSize = 10.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = Color(0xFF38BDF8)
                                     )
                                 }
                             }
                         }
-                        Text(
-                            text = "Hoy: Mín ${weather.todayMin}° • Máx ${weather.todayMax}°",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = "Mañana: Mín ${weather.tomorrowMin}° • Máx ${weather.tomorrowMax}°",
-                            fontSize = 10.5.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f)
-                        )
+                        // Pronóstico de Mañana con probabilidad de lluvia solicitada
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = "Mañana: Mín ${weather.tomorrowMin}° • Máx ${weather.tomorrowMax}°",
+                                fontSize = 10.5.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f)
+                            )
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = Color(0xFF0284C7).copy(alpha = 0.22f),
+                                border = androidx.compose.foundation.BorderStroke(0.5.dp, Color(0xFF38BDF8).copy(alpha = 0.5f))
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.WaterDrop,
+                                        contentDescription = "Probabilidad de lluvia mañana",
+                                        tint = Color(0xFF38BDF8),
+                                        modifier = Modifier.size(10.dp)
+                                    )
+                                    Text(
+                                        text = "${weather.tomorrowRainProbabilityPercent}% lluvia",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF38BDF8)
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -272,7 +344,7 @@ fun TvTopBar(
                 }
             }
 
-            // ALERTA DE TEMPERATURA MUY ALTA
+            // ALERTA DE TEMPERATURA MUY ALTA (>35°C)
             if (weather.isHeatAlertActive) {
                 Surface(
                     shape = RoundedCornerShape(14.dp),
@@ -319,30 +391,6 @@ fun TvTopBar(
                     }
                 }
             }
-        }
-
-        // Right side: Quick Action Buttons (Energy Profile + Configuration / Ranura Cog)
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            // Energy Profile Chip
-            TvHeaderActionButton(
-                icon = Icons.Default.PowerSettingsNew,
-                label = energyProfile.title,
-                tint = if (energyProfile == EnergyProfile.ULTRA_SAVER) TvEnergySaverGreen else TvCyanAccent,
-                onClick = onEnergyProfileClick,
-                testTag = "energy_profile_button"
-            )
-
-            // Settings Button (Icono de la Ranura / Configuración)
-            TvHeaderIconButton(
-                icon = Icons.Default.Settings,
-                contentDesc = "Configuración",
-                onClick = onSettingsClick,
-                highlight = true,
-                testTag = "settings_top_button"
-            )
         }
     }
 }

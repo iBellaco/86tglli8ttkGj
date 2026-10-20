@@ -546,6 +546,7 @@ class LauncherViewModel(
             tomorrowMin = 16,
             tomorrowMax = 25,
             rainProbabilityPercent = 68,
+            tomorrowRainProbabilityPercent = 55,
             rainStartHour = "14:00",
             rainEndHour = "18:30",
             isHighHeat = false
@@ -559,6 +560,7 @@ class LauncherViewModel(
             tomorrowMin = 23,
             tomorrowMax = 38,
             rainProbabilityPercent = 10,
+            tomorrowRainProbabilityPercent = 15,
             rainStartHour = "",
             rainEndHour = "",
             isHighHeat = true
@@ -572,6 +574,7 @@ class LauncherViewModel(
             tomorrowMin = 15,
             tomorrowMax = 26,
             rainProbabilityPercent = 20,
+            tomorrowRainProbabilityPercent = 25,
             rainStartHour = "",
             rainEndHour = "",
             isHighHeat = false
@@ -585,6 +588,7 @@ class LauncherViewModel(
             tomorrowMin = 24,
             tomorrowMax = 37,
             rainProbabilityPercent = 85,
+            tomorrowRainProbabilityPercent = 70,
             rainStartHour = "16:00",
             rainEndHour = "20:00",
             isHighHeat = true

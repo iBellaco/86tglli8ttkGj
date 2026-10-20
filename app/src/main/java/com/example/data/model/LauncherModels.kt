@@ -98,6 +98,7 @@ data class WeatherState(
     val tomorrowMin: Int = 16,
     val tomorrowMax: Int = 25,
     val rainProbabilityPercent: Int = 65,
+    val tomorrowRainProbabilityPercent: Int = 45,
     val rainStartHour: String = "14:00",
     val rainEndHour: String = "18:30",
     val isHighHeat: Boolean = false
