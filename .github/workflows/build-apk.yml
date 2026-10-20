@@ -21,6 +21,9 @@ on:
         options:
           - debug
 
+permissions:
+  contents: write
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -48,8 +51,6 @@ jobs:
           chmod +x gradlew || true
 
           echo "=== 2. Configurar debug.keystore (Requerido por build.gradle.kts) ==="
-          # En GitHub Actions, debug.keystore está en .gitignore.
-          # Lo decodificamos desde debug.keystore.base64 o lo generamos si falta.
           if [ ! -f debug.keystore ]; then
             if [ -f debug.keystore.base64 ]; then
               echo "Decodificando debug.keystore desde debug.keystore.base64..."
@@ -92,10 +93,28 @@ jobs:
           echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
           ls -lh "$APK_PATH"
 
-      - name: 📦 Subir APK a Artefactos de GitHub
+      - name: 📦 Subir APK a Artefactos de GitHub (Descarga zip)
         uses: actions/upload-artifact@v4
         with:
-          name: NovaTV-Launcher-v1.3-debug
+          name: NovaTV-Launcher-v1.4-debug
           path: ${{ steps.find_apk.outputs.apk_path }}
           retention-days: 30
           if-no-files-found: error
+
+      - name: 🚀 Publicar APK en GitHub Releases (Descarga directa .apk)
+        if: github.event_name != 'pull_request'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG_NAME="v1.4-build${{ github.run_number }}"
+          cp "${{ steps.find_apk.outputs.apk_path }}" ./NovaTV-Launcher-v1.4.apk
+          
+          echo "Publicando release con el binario .apk directo..."
+          gh release create "$TAG_NAME" \
+            ./NovaTV-Launcher-v1.4.apk \
+            --title "Nova TV Launcher v1.4 (Build #${{ github.run_number }})" \
+            --notes "### 🚀 APK Depurada para Android TV
+          - Descarga directa: **NovaTV-Launcher-v1.4.apk** (no comprimido, listo para instalar).
+          - Optimizado para navegación por control remoto (D-Pad).
+          - Gestor de pestañas personalizables y agrupación de apps." \
+            --latest || true
