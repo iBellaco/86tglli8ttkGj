@@ -68,6 +68,7 @@ import com.example.ui.components.TabAppAssignmentDialog
 import com.example.ui.components.TabEditDialog
 import com.example.ui.components.TvAppCard
 import com.example.ui.components.TvCategoryTabs
+import com.example.ui.components.TvHomeGuidanceDialog
 import com.example.ui.components.TvQuickAccessDock
 import com.example.ui.components.TvRecentMediaBanner
 import com.example.ui.components.TvSearchBar
@@ -122,6 +123,8 @@ class MainActivity : ComponentActivity() {
                 val observer = LifecycleEventObserver { _, event ->
                     if (event == Lifecycle.Event.ON_RESUME) {
                         launcherViewModel.refreshInstalledApps()
+                        launcherViewModel.syncMediaSessions()
+                        launcherViewModel.checkDefaultLauncherStatus(context)
                     }
                 }
                 lifecycleOwner.lifecycle.addObserver(observer)
@@ -133,7 +136,8 @@ class MainActivity : ComponentActivity() {
             MyApplicationTheme(darkTheme = uiState.isNightModeActive) {
                 // TV Back navigation handling
                 BackHandler(
-                    enabled = uiState.isVoiceSearchActive ||
+                    enabled = uiState.isHomeGuidanceOpen ||
+                            uiState.isVoiceSearchActive ||
                             uiState.selectedAppForActions != null ||
                             uiState.isSettingsOpen ||
                             uiState.isCloudSyncOpen ||
@@ -146,6 +150,7 @@ class MainActivity : ComponentActivity() {
                             tabUiState.tabBeingManagedApps != null
                 ) {
                     when {
+                        uiState.isHomeGuidanceOpen -> launcherViewModel.closeHomeGuidanceDialog()
                         tabUiState.tabBeingManagedApps != null -> tabViewModel.closeManageAppsDialog()
                         tabUiState.tabBeingEdited != null -> tabViewModel.closeEditTabDialog()
                         tabUiState.isCreateTabOpen -> tabViewModel.closeCreateTabDialog()
@@ -421,6 +426,16 @@ fun NovaTvLauncherScreen(
                     tabViewModel.batchAssignApps(selectedPackages, tab.id)
                 },
                 onDismiss = { tabViewModel.closeManageAppsDialog() }
+            )
+        }
+
+        // 8. TV Default Home Launcher Resolution Guidance Dialog
+        if (uiState.isHomeGuidanceOpen) {
+            TvHomeGuidanceDialog(
+                isDefaultLauncher = uiState.isDefaultLauncher,
+                onSetDefaultLauncherClick = { launcherViewModel.setDefaultLauncher(context) },
+                onOpenAccessibilityClick = { launcherViewModel.openAccessibilitySettings(context) },
+                onDismiss = { launcherViewModel.closeHomeGuidanceDialog() }
             )
         }
     }

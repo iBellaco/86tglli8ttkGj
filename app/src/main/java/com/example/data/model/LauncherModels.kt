@@ -87,6 +87,8 @@ data class RecentMediaItem(
     val durationRemaining: String = "Quedan 18 min",
     val progressPercent: Float = 0.65f,
     val brandColorHex: String = "#EF4444",
+    val thumbnailUrl: String? = null,
+    val mediaUri: String? = null,
     val lastWatchedTimestamp: Long = System.currentTimeMillis()
 )
 

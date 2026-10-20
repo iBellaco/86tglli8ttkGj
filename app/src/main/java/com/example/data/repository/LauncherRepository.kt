@@ -21,6 +21,11 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import android.graphics.Bitmap
+import android.media.MediaMetadata
+import android.media.session.MediaSessionManager
+import java.io.File
+import java.io.FileOutputStream
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -455,7 +460,7 @@ class LauncherRepository(
 
     suspend fun markAppLaunched(packageName: String, appLabel: String = "") {
         dao.incrementLaunch(packageName, System.currentTimeMillis())
-        recordMediaPlayback(packageName, appLabel)
+        // Do NOT generate fake video playback here - only record actual media when played/detected!
     }
 
     suspend fun deleteApp(packageName: String) {
@@ -613,6 +618,13 @@ class LauncherRepository(
     }
 
     private fun loadRecentMediaFromPrefs(): List<RecentMediaItem> {
+        // By user requirement: purge any legacy fake/bogus generated video entries (e.g. fake "Planeta Tierra" in YouTube)
+        val hasPurged = mediaPrefs.getBoolean("purged_fake_media_v3", false)
+        if (!hasPurged) {
+            mediaPrefs.edit().remove("recent_media_json").putBoolean("purged_fake_media_v3", true).apply()
+            return emptyList()
+        }
+
         val jsonStr = mediaPrefs.getString("recent_media_json", null) ?: return emptyList()
         return try {
             val array = JSONArray(jsonStr)
@@ -629,6 +641,8 @@ class LauncherRepository(
                         durationRemaining = obj.optString("durationRemaining", "Quedan 18 min"),
                         progressPercent = obj.optDouble("progressPercent", 0.65).toFloat(),
                         brandColorHex = obj.optString("brandColorHex", "#EF4444"),
+                        thumbnailUrl = obj.optString("thumbnailUrl", "").ifEmpty { null },
+                        mediaUri = obj.optString("mediaUri", "").ifEmpty { null },
                         lastWatchedTimestamp = obj.optLong("lastWatchedTimestamp", System.currentTimeMillis())
                     )
                 )
@@ -651,6 +665,8 @@ class LauncherRepository(
                 put("durationRemaining", item.durationRemaining)
                 put("progressPercent", item.progressPercent.toDouble())
                 put("brandColorHex", item.brandColorHex)
+                put("thumbnailUrl", item.thumbnailUrl ?: "")
+                put("mediaUri", item.mediaUri ?: "")
                 put("lastWatchedTimestamp", item.lastWatchedTimestamp)
             }
             array.put(obj)
@@ -659,87 +675,93 @@ class LauncherRepository(
         _recentMedia.value = list
     }
 
-    fun recordMediaPlayback(packageName: String, appLabel: String) {
-        val lowerPkg = packageName.lowercase()
-        val lowerLabel = appLabel.lowercase()
-
-        val isVideoApp = lowerPkg.contains("youtube") || lowerPkg.contains("netflix") ||
-                lowerPkg.contains("amazonvideo") || lowerPkg.contains("primevideo") ||
-                lowerPkg.contains("disney") || lowerPkg.contains("stream") || lowerPkg.contains("hbo") ||
-                lowerLabel.contains("youtube") || lowerLabel.contains("netflix") ||
-                lowerLabel.contains("prime") || lowerLabel.contains("disney")
-
-        if (!isVideoApp) return
-
-        val appName = when {
-            lowerPkg.contains("kids") || lowerLabel.contains("kids") -> "YouTube Kids"
-            lowerPkg.contains("youtube") || lowerLabel.contains("youtube") -> "YouTube"
-            lowerPkg.contains("netflix") || lowerLabel.contains("netflix") -> "Netflix"
-            lowerPkg.contains("amazon") || lowerPkg.contains("prime") || lowerLabel.contains("prime") -> "Prime Video"
-            lowerPkg.contains("disney") || lowerLabel.contains("disney") -> "Disney+"
-            lowerPkg.contains("stream") || lowerPkg.contains("hbo") -> "Max"
-            else -> if (appLabel.isNotEmpty()) appLabel else "Video App"
-        }
-
-        val brandColor = when (appName) {
-            "YouTube" -> "#EF4444"
-            "YouTube Kids" -> "#F59E0B"
-            "Netflix" -> "#E50914"
-            "Prime Video" -> "#00A8E1"
-            "Disney+" -> "#113CCF"
-            "Max" -> "#5822B4"
-            else -> "#38BDF8"
-        }
-
-        val sampleTitles = when (appName) {
-            "YouTube" -> listOf(
-                "Documental: Planeta Tierra en 4K Ultra HD",
-                "Resumen de Tecnología y Nuevos Gadgets",
-                "Guía de Android TV y Kotlin Avanzado",
-                "Música Relajante para Dormir y Trabajar"
-            )
-            "YouTube Kids" -> listOf(
-                "Aventuras de Animales y Cuentos Fantásticos",
-                "Canciones Infantiles Divertidas y Juegos",
-                "Aprende los Números y Colores en Familia"
-            )
-            "Netflix" -> listOf(
-                "Stranger Things • T4:E8 La Batalla",
-                "El Juego del Calamar • Nueva Temporada",
-                "Merlina • Misterios en la Academia",
-                "El Agente Nocturno • Acción y Suspenso"
-            )
-            "Prime Video" -> listOf(
-                "The Boys • Temporada 4: Capítulo 1",
-                "El Señor de los Anillos: Los Anillos de Poder",
-                "Reacher • Sin Descanso",
-                "Fallout • El Refugio 33"
-            )
-            "Disney+" -> listOf(
-                "The Mandalorian • El Rescate del Imperio",
-                "Loki • El Multiverso Temporal",
-                "Moana 2 • Nuevos Horizontes"
-            )
-            else -> listOf("Último Episodio Reproducido en $appName")
-        }
-
-        val title = sampleTitles.random()
-        val current = _recentMedia.value.filter { it.packageName != packageName }.toMutableList()
-        val minutesLeft = (8..45).random()
-        val progress = ((25..85).random()) / 100f
+    /**
+     * Records legitimate media playback with actual video title, subtitle, and thumbnail image.
+     */
+    fun recordActualMediaPlayback(
+        packageName: String,
+        appName: String,
+        title: String,
+        subtitle: String = "",
+        thumbnailUrl: String? = null,
+        mediaUri: String? = null,
+        durationRemaining: String = "Continuar viendo",
+        progressPercent: Float = 0.5f,
+        brandColorHex: String = "#EF4444"
+    ) {
+        if (title.isBlank()) return
+        val current = _recentMedia.value.filter { it.packageName != packageName || it.title != title }.toMutableList()
         val newItem = RecentMediaItem(
             id = "media_${System.currentTimeMillis()}",
             appName = appName,
             packageName = packageName,
             title = title,
-            subtitle = "Continuar viendo en $appName",
-            durationRemaining = "Quedan $minutesLeft min",
-            progressPercent = progress,
-            brandColorHex = brandColor,
+            subtitle = subtitle,
+            durationRemaining = durationRemaining,
+            progressPercent = progressPercent,
+            brandColorHex = brandColorHex,
+            thumbnailUrl = thumbnailUrl,
+            mediaUri = mediaUri,
             lastWatchedTimestamp = System.currentTimeMillis()
         )
         current.add(0, newItem)
-        saveRecentMediaToPrefs(current.take(6))
+        saveRecentMediaToPrefs(current.take(8))
+    }
+
+    /**
+     * Inspects active Android MediaSessions to capture the real title and artwork of whatever
+     * video or audio is currently or recently playing on the device.
+     */
+    fun syncActiveMediaSessions() {
+        try {
+            val mediaSessionManager = context.getSystemService(Context.MEDIA_SESSION_SERVICE) as? MediaSessionManager
+            val controllers = mediaSessionManager?.getActiveSessions(null)
+            controllers?.firstOrNull()?.let { controller ->
+                val metadata = controller.metadata
+                val title = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
+                val artist = metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST)
+                    ?: metadata?.getString(MediaMetadata.METADATA_KEY_AUTHOR)
+                    ?: ""
+                val pkg = controller.packageName
+                val artBitmap = metadata?.getBitmap(MediaMetadata.METADATA_KEY_ART)
+                    ?: metadata?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
+
+                var thumbUri = metadata?.getString(MediaMetadata.METADATA_KEY_ART_URI)
+                    ?: metadata?.getString(MediaMetadata.METADATA_KEY_DISPLAY_ICON_URI)
+
+                if (artBitmap != null && thumbUri == null) {
+                    try {
+                        val file = File(context.cacheDir, "media_art_${pkg.replace('.', '_')}.png")
+                        FileOutputStream(file).use { out ->
+                            artBitmap.compress(Bitmap.CompressFormat.PNG, 90, out)
+                        }
+                        thumbUri = file.absolutePath
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
+
+                if (!title.isNullOrBlank()) {
+                    val appLabel = try {
+                        val appInfo = context.packageManager.getApplicationInfo(pkg, 0)
+                        context.packageManager.getApplicationLabel(appInfo).toString()
+                    } catch (e: Exception) {
+                        "Video"
+                    }
+                    recordActualMediaPlayback(
+                        packageName = pkg,
+                        appName = appLabel,
+                        title = title,
+                        subtitle = artist,
+                        thumbnailUrl = thumbUri
+                    )
+                }
+            }
+        } catch (e: SecurityException) {
+            // Expected on standard permissions without NotificationListener
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     fun removeRecentMedia(mediaId: String) {
@@ -752,13 +774,42 @@ class LauncherRepository(
     }
 
     fun simulateTestPlayback(serviceName: String) {
-        val (pkg, name) = when (serviceName.lowercase()) {
-            "youtube" -> "com.google.android.youtube.tv" to "YouTube"
-            "youtube kids" -> "com.google.android.youtube.googletvkids" to "YouTube Kids"
-            "netflix" -> "com.netflix.ninja" to "Netflix"
-            "prime video" -> "com.amazon.amazonvideo.livingroom" to "Prime Video"
-            else -> "com.google.android.youtube.tv" to "YouTube"
+        // Only used for explicit testing/demo if triggered by user
+        val (pkg, name, title, thumb) = when (serviceName.lowercase()) {
+            "youtube" -> Quadruple(
+                "com.google.android.youtube.tv",
+                "YouTube",
+                "Documental Naturaleza 4K",
+                "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800&q=80"
+            )
+            "netflix" -> Quadruple(
+                "com.netflix.ninja",
+                "Netflix",
+                "Serie en Emisión",
+                "https://images.unsplash.com/photo-1574375927938-d5a98e8ffe85?w=800&q=80"
+            )
+            "prime video" -> Quadruple(
+                "com.amazon.amazonvideo.livingroom",
+                "Prime Video",
+                "Película de Acción",
+                "https://images.unsplash.com/photo-1485846234645-a62644f84728?w=800&q=80"
+            )
+            else -> Quadruple(
+                "com.google.android.youtube.tv",
+                "YouTube",
+                "Video Reciente",
+                "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800&q=80"
+            )
         }
-        recordMediaPlayback(pkg, name)
+        recordActualMediaPlayback(
+            packageName = pkg,
+            appName = name,
+            title = title,
+            subtitle = "Continuar viendo en $name",
+            thumbnailUrl = thumb,
+            brandColorHex = if (name == "YouTube") "#EF4444" else "#E50914"
+        )
     }
 }
+
+private data class Quadruple<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)

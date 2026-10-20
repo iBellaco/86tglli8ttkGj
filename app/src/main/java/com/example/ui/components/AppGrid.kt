@@ -77,25 +77,6 @@ fun AppGrid(
     var focusedApp by remember { mutableStateOf<AppItem?>(null) }
     var focusedIndex by remember { mutableStateOf<Int?>(null) }
 
-    // Smart auto-scroll: ensures focused app row is comfortably in view
-    LaunchedEffect(focusedIndex) {
-        focusedIndex?.let { index ->
-            val actualItemIndex = if (headerContent != null) index + 1 else index
-            val layoutInfo = gridState.layoutInfo
-            val visibleItems = layoutInfo.visibleItemsInfo
-            val itemInfo = visibleItems.firstOrNull { it.index == actualItemIndex }
-
-            if (itemInfo == null) {
-                gridState.animateScrollToItem(actualItemIndex)
-            } else {
-                val viewportEnd = layoutInfo.viewportEndOffset - layoutInfo.afterContentPadding
-                if (itemInfo.offset.y + itemInfo.size.height > viewportEnd - 30) {
-                    gridState.animateScrollToItem(actualItemIndex)
-                }
-            }
-        }
-    }
-
     // Reset focused item if apps list changes
     LaunchedEffect(apps) {
         if (apps.isEmpty()) {
@@ -123,12 +104,6 @@ fun AppGrid(
                             KeyEvent.KEYCODE_MENU, KeyEvent.KEYCODE_BUTTON_X, KeyEvent.KEYCODE_BUTTON_Y -> {
                                 focusedApp?.let {
                                     onOpenMenu(it)
-                                    true
-                                } ?: false
-                            }
-                            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> {
-                                focusedApp?.let {
-                                    onLaunchApp(it)
                                     true
                                 } ?: false
                             }

@@ -7,7 +7,6 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.focusable
@@ -52,7 +51,13 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -110,14 +115,46 @@ fun TvAppCard(
         TvCyanAccent
     }
 
+    val coroutineScope = rememberCoroutineScope()
+    var longPressJob by remember { mutableStateOf<Job?>(null) }
+    var menuOpenedByHold by remember { mutableStateOf(false) }
+
     Column(
         modifier = modifier
             .width(if (isDockItem) 78.dp else 88.dp)
             .scale(scale)
             .onKeyEvent { keyEvent ->
+                val keyCode = keyEvent.nativeKeyEvent.keyCode
+                val isCenterKey = keyCode == KeyEvent.KEYCODE_DPAD_CENTER ||
+                        keyCode == KeyEvent.KEYCODE_ENTER ||
+                        keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER
+
                 if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
-                    if (keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_MENU) {
+                    if (keyCode == KeyEvent.KEYCODE_MENU) {
                         onOpenMenu(app)
+                        true
+                    } else if (isCenterKey) {
+                        if (keyEvent.nativeKeyEvent.repeatCount == 0) {
+                            menuOpenedByHold = false
+                            longPressJob?.cancel()
+                            longPressJob = coroutineScope.launch {
+                                // Holding for 3 seconds opens the app menu
+                                delay(3000L)
+                                menuOpenedByHold = true
+                                onOpenMenu(app)
+                            }
+                        }
+                        true
+                    } else false
+                } else if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_UP) {
+                    if (isCenterKey) {
+                        longPressJob?.cancel()
+                        longPressJob = null
+                        if (!menuOpenedByHold) {
+                            // Released before 3 seconds: normal launch
+                            onLaunch(app)
+                        }
+                        menuOpenedByHold = false
                         true
                     } else false
                 } else false
@@ -246,56 +283,23 @@ fun TvAppCard(
 
         Spacer(modifier = Modifier.height(4.dp))
 
-        // App Title with smooth animation and high-contrast theme-dependent styling
-        val textScale by animateFloatAsState(
-            targetValue = if (isFocused) 1.08f else 1.0f,
-            animationSpec = spring(dampingRatio = 0.8f, stiffness = 400f),
-            label = "appLabelScale"
-        )
-        val textBgColor by animateColorAsState(
-            targetValue = if (isFocused) {
-                TvCyanAccent.copy(alpha = 0.18f)
-            } else {
-                Color.Transparent
-            },
-            label = "appLabelBg"
-        )
-        val textColor by animateColorAsState(
-            targetValue = if (isFocused) {
-                TvCyanAccent
-            } else {
-                MaterialTheme.colorScheme.onSurface
-            },
-            label = "appLabelColor"
-        )
-
+        // App Title: Static, clean, crisp and fast (no slow marquee animations or extra animators)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .scale(textScale)
                 .clip(RoundedCornerShape(6.dp))
-                .background(textBgColor)
-                .padding(horizontal = 3.dp, vertical = 2.dp),
+                .background(if (isFocused) TvCyanAccent.copy(alpha = 0.18f) else Color.Transparent)
+                .padding(horizontal = 4.dp, vertical = 2.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = app.label,
                 fontSize = if (isDockItem) 11.sp else 11.5.sp,
-                fontWeight = if (isFocused) FontWeight.ExtraBold else FontWeight.SemiBold,
-                color = textColor,
+                fontWeight = if (isFocused) FontWeight.Bold else FontWeight.Medium,
+                color = if (isFocused) TvCyanAccent else MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
-                overflow = if (isFocused) TextOverflow.Clip else TextOverflow.Ellipsis,
-                textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .then(
-                        if (isFocused) {
-                            Modifier.basicMarquee(
-                                iterations = Int.MAX_VALUE,
-                                initialDelayMillis = 600,
-                                velocity = 40.dp
-                            )
-                        } else Modifier
-                    )
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
             )
         }
     }

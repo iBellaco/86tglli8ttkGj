@@ -41,6 +41,8 @@ data class LauncherUiState(
     val systemStats: SystemStats? = null,
     val isHardwareEfficiencyDialogOpen: Boolean = false,
     val weatherState: WeatherState = WeatherState(),
+    val isDefaultLauncher: Boolean = false,
+    val isHomeGuidanceOpen: Boolean = false,
     val toastMessage: String? = null
 )
 
@@ -265,6 +267,18 @@ class LauncherViewModel(
     }
 
     fun launchMediaItem(context: Context, mediaItem: RecentMediaItem) {
+        if (!mediaItem.mediaUri.isNullOrEmpty()) {
+            try {
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(mediaItem.mediaUri)).apply {
+                    setPackage(mediaItem.packageName)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(intent)
+                return
+            } catch (e: Exception) {
+                // Fall back to launching the app
+            }
+        }
         val app = AppItem(
             packageName = mediaItem.packageName,
             label = mediaItem.appName,
@@ -272,6 +286,12 @@ class LauncherViewModel(
             categoryId = "streaming"
         )
         launchApp(context, app)
+    }
+
+    fun syncMediaSessions() {
+        viewModelScope.launch {
+            repository.syncActiveMediaSessions()
+        }
     }
 
     fun removeRecentMedia(mediaId: String) {
@@ -485,33 +505,98 @@ class LauncherViewModel(
         }
     }
 
-    fun setDefaultLauncher(context: Context) {
+    fun checkDefaultLauncherStatus(context: Context) {
         try {
-            val intent = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-                Intent(android.provider.Settings.ACTION_HOME_SETTINGS)
-            } else {
-                Intent(android.provider.Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)
+            val intent = Intent(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_HOME) }
+            val resolveInfo = context.packageManager.resolveActivity(intent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
+            val isDefault = resolveInfo?.activityInfo?.packageName == context.packageName
+            _uiState.value = _uiState.value.copy(isDefaultLauncher = isDefault)
+        } catch (e: Exception) {
+            _uiState.value = _uiState.value.copy(isDefaultLauncher = false)
+        }
+    }
+
+    fun openHomeGuidanceDialog() {
+        _uiState.value = _uiState.value.copy(isHomeGuidanceOpen = true)
+    }
+
+    fun closeHomeGuidanceDialog() {
+        _uiState.value = _uiState.value.copy(isHomeGuidanceOpen = false)
+    }
+
+    fun openAccessibilitySettings(context: Context) {
+        try {
+            val intent = Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             context.startActivity(intent)
         } catch (e: Exception) {
+            showToast(context, "Abre Ajustes de la TV > Sistema > Accesibilidad")
+        }
+    }
+
+    fun setDefaultLauncher(context: Context) {
+        var launched = false
+
+        // 1. Try Android 10+ (Q) RoleManager to directly request ROLE_HOME popup
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            try {
+                val roleManager = context.getSystemService(android.app.role.RoleManager::class.java)
+                if (roleManager?.isRoleAvailable(android.app.role.RoleManager.ROLE_HOME) == true) {
+                    if (!roleManager.isRoleHeld(android.app.role.RoleManager.ROLE_HOME)) {
+                        val intent = roleManager.createRequestRoleIntent(android.app.role.RoleManager.ROLE_HOME).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        context.startActivity(intent)
+                        launched = true
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
+        // 2. Try ACTION_HOME_SETTINGS
+        if (!launched) {
+            try {
+                val intent = Intent(android.provider.Settings.ACTION_HOME_SETTINGS).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(intent)
+                launched = true
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
+        // 3. Try ACTION_MANAGE_DEFAULT_APPS_SETTINGS
+        if (!launched) {
+            try {
+                val intent = Intent(android.provider.Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(intent)
+                launched = true
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
+        // 4. Fallback to Home Intent Chooser
+        if (!launched) {
             try {
                 val homeIntent = Intent(Intent.ACTION_MAIN).apply {
                     addCategory(Intent.CATEGORY_HOME)
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK
                 }
                 context.startActivity(homeIntent)
-            } catch (e2: Exception) {
-                try {
-                    val manageAppsIntent = Intent(android.provider.Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS).apply {
-                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                    }
-                    context.startActivity(manageAppsIntent)
-                } catch (e3: Exception) {
-                    showToast(context, "Abre Ajustes de TV > Aplicaciones > Launcher por defecto")
-                }
+            } catch (e: Exception) {
+                showToast(context, "Abre Ajustes de TV > Aplicaciones > Aplicaciones predeterminadas")
             }
         }
+
+        // Show TV guidance dialog with steps for TVs that override the Home key
+        openHomeGuidanceDialog()
     }
 
     fun exportBackup(onExported: (String) -> Unit) {

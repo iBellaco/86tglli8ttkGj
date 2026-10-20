@@ -49,6 +49,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
 import com.example.data.model.RecentMediaItem
 import com.example.ui.theme.TvCyanAccent
 import com.example.ui.theme.TvFocusBorder
@@ -171,10 +173,10 @@ fun RecentMediaCard(
             .height(145.dp)
             .scale(scale)
             .clip(RoundedCornerShape(16.dp))
-            .background(gradientBrush)
+            .background(Color(0xFF0F172A))
             .border(
-                width = if (isFocused) 2.dp else 1.dp,
-                color = if (isFocused) TvFocusBorder else brandColor.copy(alpha = 0.35f),
+                width = if (isFocused) 2.5.dp else 1.dp,
+                color = if (isFocused) TvFocusBorder else brandColor.copy(alpha = 0.4f),
                 shape = RoundedCornerShape(16.dp)
             )
             .clickable(
@@ -185,6 +187,35 @@ fun RecentMediaCard(
             .focusable(interactionSource = interactionSource)
             .testTag("recent_media_${item.id}")
     ) {
+        // Real Video Thumbnail Image (loaded via Coil)
+        if (!item.thumbnailUrl.isNullOrEmpty()) {
+            AsyncImage(
+                model = item.thumbnailUrl,
+                contentDescription = item.title,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+
+        // Gradient overlay for sleek cinematic look and crystal-clear text readability
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    if (!item.thumbnailUrl.isNullOrEmpty()) {
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Black.copy(alpha = 0.35f),
+                                Color.Black.copy(alpha = 0.65f),
+                                Color.Black.copy(alpha = 0.94f)
+                            )
+                        )
+                    } else {
+                        gradientBrush
+                    }
+                )
+        )
+
         // Content
         Column(
             modifier = Modifier
