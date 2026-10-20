@@ -54,6 +54,7 @@ fun TvCategoryTabs(
     selectedTabId: String,
     onTabSelected: (String) -> Unit,
     onAddNewTabClick: () -> Unit,
+    onOpenTabManager: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     LazyRow(
@@ -77,14 +78,7 @@ fun TvCategoryTabs(
 
         // Dynamically fetched Categories
         items(categories, key = { it.id }) { cat ->
-            val icon = when (cat.iconName) {
-                "star" -> Icons.Default.Star
-                "movie" -> Icons.Default.Movie
-                "sports_esports" -> Icons.Default.SportsEsports
-                "build" -> Icons.Default.Build
-                "music_note" -> Icons.Default.MusicNote
-                else -> Icons.Default.Apps
-            }
+            val icon = resolveTabIcon(cat.iconName)
             TvTabItem(
                 id = cat.id,
                 title = cat.title,
@@ -111,6 +105,50 @@ fun TvCategoryTabs(
         item {
             TvAddTabButton(onClick = onAddNewTabClick)
         }
+
+        // Manage Tabs Button
+        item {
+            TvManageTabsButton(onClick = onOpenTabManager)
+        }
+    }
+}
+
+@Composable
+fun TvManageTabsButton(
+    onClick: () -> Unit
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+
+    Row(
+        modifier = Modifier
+            .scale(if (isFocused) 1.08f else 1f)
+            .clip(RoundedCornerShape(14.dp))
+            .background(if (isFocused) TvCyanAccent else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f))
+            .border(
+                width = 1.dp,
+                color = if (isFocused) TvFocusBorder else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                shape = RoundedCornerShape(14.dp)
+            )
+            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
+            .focusable(interactionSource = interactionSource)
+            .padding(horizontal = 12.dp, vertical = 10.dp)
+            .testTag("manage_tabs_button"),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Icon(
+            imageVector = Icons.Default.Build,
+            contentDescription = "Gestionar Pestañas",
+            tint = if (isFocused) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(16.dp)
+        )
+        Text(
+            text = "Gestionar Pestañas",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium,
+            color = if (isFocused) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 

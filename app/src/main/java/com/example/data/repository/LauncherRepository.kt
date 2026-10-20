@@ -330,22 +330,44 @@ class LauncherRepository(
         dao.setAppCategory(packageName, categoryId)
     }
 
-    suspend fun addCustomCategory(title: String, iconName: String) {
+    suspend fun addCustomCategory(title: String, iconName: String, colorHex: String = "#38BDF8", initialPackages: List<String> = emptyList()): CategoryTab {
         val id = "cat_${System.currentTimeMillis()}"
         val existing = dao.getAllCategories().first()
-        dao.insertCategory(
-            CategoryTab(
-                id = id,
-                title = title,
-                iconName = iconName,
-                isCustom = true,
-                orderIndex = existing.size
-            )
+        val newCategory = CategoryTab(
+            id = id,
+            title = title,
+            iconName = iconName,
+            colorHex = colorHex,
+            isCustom = true,
+            orderIndex = existing.size
         )
+        dao.insertCategory(newCategory)
+        for (pkg in initialPackages) {
+            dao.setAppCategory(pkg, id)
+        }
+        return newCategory
     }
 
-    suspend fun deleteCategory(id: String) {
+    suspend fun updateCustomCategory(id: String, title: String, iconName: String, colorHex: String) {
+        dao.updateCategoryDetails(id, title, iconName, colorHex)
+    }
+
+    suspend fun deleteCategory(id: String, fallbackCategoryId: String = "streaming") {
+        // Reassign all apps in this category to fallback category so user apps are never orphaned
+        dao.reassignAppsCategory(oldCategoryId = id, newCategoryId = fallbackCategoryId)
         dao.deleteCategory(id)
+    }
+
+    suspend fun reorderCategories(orderedIds: List<String>) {
+        orderedIds.forEachIndexed { index, id ->
+            dao.updateCategoryOrder(id, index)
+        }
+    }
+
+    suspend fun batchAssignAppsToCategory(packageNames: List<String>, categoryId: String) {
+        for (pkg in packageNames) {
+            dao.setAppCategory(pkg, categoryId)
+        }
     }
 
     suspend fun markAppLaunched(packageName: String) {

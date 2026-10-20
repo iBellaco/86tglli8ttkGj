@@ -1,6 +1,7 @@
 package com.example
 
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -35,6 +36,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -56,9 +58,12 @@ import com.example.ui.components.AppActionDialog
 import com.example.ui.components.HiddenAppsDialog
 import com.example.ui.components.NewTabDialog
 import com.example.ui.components.SettingsDialog
+import com.example.ui.components.TabAppAssignmentDialog
+import com.example.ui.components.TabEditDialog
 import com.example.ui.components.TvAppCard
 import com.example.ui.components.TvCategoryTabs
 import com.example.ui.components.TvQuickAccessDock
+import com.example.ui.components.TvTabManagerDialog
 import com.example.ui.components.TvTopBar
 import com.example.ui.components.TvWidgetsRow
 import com.example.ui.components.VoiceSearchDialog
@@ -66,6 +71,7 @@ import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.theme.TvBackgroundDark
 import com.example.ui.theme.TvCyanAccent
 import com.example.ui.viewmodel.LauncherViewModel
+import com.example.ui.viewmodel.TabViewModel
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -76,14 +82,31 @@ class MainActivity : ComponentActivity() {
         val repo = LauncherRepository(applicationContext, db.launcherDao())
 
         setContent {
-            val viewModel: LauncherViewModel = viewModel {
+            val launcherViewModel: LauncherViewModel = viewModel {
                 LauncherViewModel(repo)
             }
-            val uiState by viewModel.uiState.collectAsState()
-            val categories by viewModel.categories.collectAsState()
-            val dockApps by viewModel.dockApps.collectAsState()
-            val displayedApps by viewModel.displayedApps.collectAsState()
-            val hiddenApps by viewModel.hiddenApps.collectAsState()
+            val tabViewModel: TabViewModel = viewModel {
+                TabViewModel(repo)
+            }
+
+            val uiState by launcherViewModel.uiState.collectAsState()
+            val tabUiState by tabViewModel.uiState.collectAsState()
+            val categories by tabViewModel.categories.collectAsState()
+            val tabGroups by tabViewModel.tabGroups.collectAsState()
+            val dockApps by launcherViewModel.dockApps.collectAsState()
+            val displayedApps by launcherViewModel.displayedApps.collectAsState()
+            val hiddenApps by launcherViewModel.hiddenApps.collectAsState()
+            val allVisibleApps by tabViewModel.allVisibleApps.collectAsState()
+
+            val context = LocalContext.current
+
+            // Toast feedback
+            LaunchedEffect(tabUiState.toastMessage) {
+                tabUiState.toastMessage?.let {
+                    Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+                    tabViewModel.clearToast()
+                }
+            }
 
             MyApplicationTheme(darkTheme = uiState.isNightModeActive) {
                 // TV Back navigation handling
@@ -92,27 +115,36 @@ class MainActivity : ComponentActivity() {
                             uiState.selectedAppForActions != null ||
                             uiState.isSettingsOpen ||
                             uiState.isCloudSyncOpen ||
-                            uiState.isNewTabDialogOpen ||
                             uiState.selectedTabId == "hidden" ||
-                            uiState.searchQuery.isNotEmpty()
+                            uiState.searchQuery.isNotEmpty() ||
+                            tabUiState.isTabManagerOpen ||
+                            tabUiState.isCreateTabOpen ||
+                            tabUiState.tabBeingEdited != null ||
+                            tabUiState.tabBeingManagedApps != null
                 ) {
                     when {
-                        uiState.isVoiceSearchActive -> viewModel.closeVoiceSearch()
-                        uiState.selectedAppForActions != null -> viewModel.selectAppForActions(null)
-                        uiState.isSettingsOpen -> viewModel.closeSettings()
-                        uiState.isCloudSyncOpen -> viewModel.closeCloudSync()
-                        uiState.isNewTabDialogOpen -> viewModel.closeNewTabDialog()
-                        uiState.searchQuery.isNotEmpty() -> viewModel.updateSearchQuery("")
-                        uiState.selectedTabId == "hidden" -> viewModel.lockHiddenApps()
+                        tabUiState.tabBeingManagedApps != null -> tabViewModel.closeManageAppsDialog()
+                        tabUiState.tabBeingEdited != null -> tabViewModel.closeEditTabDialog()
+                        tabUiState.isCreateTabOpen -> tabViewModel.closeCreateTabDialog()
+                        tabUiState.isTabManagerOpen -> tabViewModel.closeTabManager()
+                        uiState.isVoiceSearchActive -> launcherViewModel.closeVoiceSearch()
+                        uiState.selectedAppForActions != null -> launcherViewModel.selectAppForActions(null)
+                        uiState.isSettingsOpen -> launcherViewModel.closeSettings()
+                        uiState.isCloudSyncOpen -> launcherViewModel.closeCloudSync()
+                        uiState.searchQuery.isNotEmpty() -> launcherViewModel.updateSearchQuery("")
+                        uiState.selectedTabId == "hidden" -> launcherViewModel.lockHiddenApps()
                     }
                 }
 
                 NovaTvLauncherScreen(
-                    viewModel = viewModel,
+                    launcherViewModel = launcherViewModel,
+                    tabViewModel = tabViewModel,
                     categories = categories,
+                    tabGroups = tabGroups,
                     dockApps = dockApps,
                     displayedApps = displayedApps,
-                    hiddenApps = hiddenApps
+                    hiddenApps = hiddenApps,
+                    allVisibleApps = allVisibleApps
                 )
             }
         }
@@ -121,14 +153,18 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun NovaTvLauncherScreen(
-    viewModel: LauncherViewModel,
+    launcherViewModel: LauncherViewModel,
+    tabViewModel: TabViewModel,
     categories: List<com.example.data.model.CategoryTab>,
+    tabGroups: List<com.example.data.model.TabGroupWithApps>,
     dockApps: List<com.example.data.model.AppItem>,
     displayedApps: List<com.example.data.model.AppItem>,
-    hiddenApps: List<com.example.data.model.AppItem>
+    hiddenApps: List<com.example.data.model.AppItem>,
+    allVisibleApps: List<com.example.data.model.AppItem>
 ) {
     val context = LocalContext.current
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState by launcherViewModel.uiState.collectAsState()
+    val tabUiState by tabViewModel.uiState.collectAsState()
 
     val backgroundBrush = remember(uiState.isNightModeActive) {
         if (uiState.isNightModeActive) {
@@ -164,35 +200,36 @@ fun NovaTvLauncherScreen(
                 energyProfile = uiState.energyProfile,
                 isNightMode = uiState.isNightModeActive,
                 isHiddenUnlocked = uiState.isHiddenAppsUnlocked,
-                onVoiceSearchClick = { viewModel.openVoiceSearch() },
-                onToggleNightMode = { viewModel.toggleNightModeManual() },
-                onToggleHiddenClick = { viewModel.selectTab("hidden") },
-                onCloudSyncClick = { viewModel.openSettings() },
-                onSettingsClick = { viewModel.openSettings() },
-                onEnergyProfileClick = { viewModel.openSettings() }
+                onVoiceSearchClick = { launcherViewModel.openVoiceSearch() },
+                onToggleNightMode = { launcherViewModel.toggleNightModeManual() },
+                onToggleHiddenClick = { launcherViewModel.selectTab("hidden") },
+                onCloudSyncClick = { launcherViewModel.openSettings() },
+                onSettingsClick = { launcherViewModel.openSettings() },
+                onEnergyProfileClick = { launcherViewModel.openSettings() }
             )
 
             // 2. Dynamic Widgets Row (Hardware Performance & Efficiency, TV Inputs)
             TvWidgetsRow(
                 systemStats = uiState.systemStats,
-                onOptimizeRamClick = { viewModel.optimizeRam(context) }
+                onOptimizeRamClick = { launcherViewModel.optimizeRam(context) }
             )
 
             // 3. Quick Access Dock (1-click pinned favorite apps)
             TvQuickAccessDock(
                 dockApps = dockApps,
-                onLaunchApp = { app -> viewModel.launchApp(context, app) },
-                onOpenMenu = { app -> viewModel.selectAppForActions(app) }
+                onLaunchApp = { app -> launcherViewModel.launchApp(context, app) },
+                onOpenMenu = { app -> launcherViewModel.selectAppForActions(app) }
             )
 
             Spacer(modifier = Modifier.height(4.dp))
 
-            // 4. Customizable Tabs Row
+            // 4. Customizable Tabs Row with Tab Management trigger
             TvCategoryTabs(
                 categories = categories,
                 selectedTabId = uiState.selectedTabId,
-                onTabSelected = { tabId -> viewModel.selectTab(tabId) },
-                onAddNewTabClick = { viewModel.openNewTabDialog() }
+                onTabSelected = { tabId -> launcherViewModel.selectTab(tabId) },
+                onAddNewTabClick = { tabViewModel.openCreateTabDialog() },
+                onOpenTabManager = { tabViewModel.openTabManager() }
             )
 
             // Optional Search Bar display when active
@@ -206,10 +243,10 @@ fun NovaTvLauncherScreen(
                 ) {
                     OutlinedTextField(
                         value = uiState.searchQuery,
-                        onValueChange = { viewModel.updateSearchQuery(it) },
+                        onValueChange = { launcherViewModel.updateSearchQuery(it) },
                         leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = TvCyanAccent) },
                         trailingIcon = {
-                            IconButton(onClick = { viewModel.updateSearchQuery("") }) {
+                            IconButton(onClick = { launcherViewModel.updateSearchQuery("") }) {
                                 Icon(Icons.Default.Close, contentDescription = "Limpiar")
                             }
                         },
@@ -227,11 +264,11 @@ fun NovaTvLauncherScreen(
                     hiddenApps = hiddenApps,
                     isUnlocked = false,
                     pinError = uiState.pinError,
-                    onUnlockWithPin = { pin -> viewModel.unlockHiddenAppsWithPin(pin) },
-                    onLockAgain = { viewModel.lockHiddenApps() },
-                    onUnhideApp = { app -> viewModel.toggleHideApp(app) },
-                    onLaunchApp = { app -> viewModel.launchApp(context, app) },
-                    onDismiss = { viewModel.selectTab("streaming") }
+                    onUnlockWithPin = { pin -> launcherViewModel.unlockHiddenAppsWithPin(pin) },
+                    onLockAgain = { launcherViewModel.lockHiddenApps() },
+                    onUnhideApp = { app -> launcherViewModel.toggleHideApp(app) },
+                    onLaunchApp = { app -> launcherViewModel.launchApp(context, app) },
+                    onDismiss = { launcherViewModel.selectTab("streaming") }
                 )
             } else {
                 if (displayedApps.isEmpty()) {
@@ -252,7 +289,7 @@ fun NovaTvLauncherScreen(
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "Usa el botón Menú del mando sobre cualquier app para moverla a esta pestaña",
+                                text = "Pulsa 'Gestionar Pestañas' o mantén pulsado Menú sobre una app para asignarla aquí",
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -272,8 +309,8 @@ fun NovaTvLauncherScreen(
                         items(displayedApps, key = { it.packageName }) { app ->
                             TvAppCard(
                                 app = app,
-                                onLaunch = { selected -> viewModel.launchApp(context, selected) },
-                                onOpenMenu = { selected -> viewModel.selectAppForActions(selected) }
+                                onLaunch = { selected -> launcherViewModel.launchApp(context, selected) },
+                                onOpenMenu = { selected -> launcherViewModel.selectAppForActions(selected) }
                             )
                         }
                     }
@@ -286,8 +323,8 @@ fun NovaTvLauncherScreen(
         if (uiState.isVoiceSearchActive) {
             VoiceSearchDialog(
                 transcript = uiState.voiceTranscript,
-                onVoiceResult = { result -> viewModel.processVoiceResult(context, result) },
-                onDismiss = { viewModel.closeVoiceSearch() }
+                onVoiceResult = { result -> launcherViewModel.processVoiceResult(context, result) },
+                onDismiss = { launcherViewModel.closeVoiceSearch() }
             )
         }
 
@@ -296,15 +333,15 @@ fun NovaTvLauncherScreen(
             AppActionDialog(
                 app = app,
                 categories = categories,
-                onDismiss = { viewModel.selectAppForActions(null) },
+                onDismiss = { launcherViewModel.selectAppForActions(null) },
                 onLaunch = {
-                    viewModel.selectAppForActions(null)
-                    viewModel.launchApp(context, app)
+                    launcherViewModel.selectAppForActions(null)
+                    launcherViewModel.launchApp(context, app)
                 },
-                onToggleHide = { viewModel.toggleHideApp(app) },
-                onTogglePinDock = { viewModel.togglePinDock(app) },
-                onToggleFavorite = { viewModel.toggleFavorite(app) },
-                onChangeCategory = { catId -> viewModel.changeAppCategory(app, catId) }
+                onToggleHide = { launcherViewModel.toggleHideApp(app) },
+                onTogglePinDock = { launcherViewModel.togglePinDock(app) },
+                onToggleFavorite = { launcherViewModel.toggleFavorite(app) },
+                onChangeCategory = { catId -> launcherViewModel.changeAppCategory(app, catId) }
             )
         }
 
@@ -315,21 +352,65 @@ fun NovaTvLauncherScreen(
                 isAutoNightMode = uiState.isAutoNightMode,
                 isNightModeActive = uiState.isNightModeActive,
                 cloudSyncMessage = uiState.cloudSyncMessage,
-                onSetEnergyProfile = { viewModel.setEnergyProfile(it) },
-                onToggleAutoNightMode = { viewModel.toggleAutoNightMode() },
-                onToggleNightModeManual = { viewModel.toggleNightModeManual() },
-                onOptimizeRam = { viewModel.optimizeRam(context) },
-                onExportBackup = { callback -> viewModel.exportBackup(callback) },
-                onImportBackup = { json -> viewModel.importBackup(json, context) },
-                onDismiss = { viewModel.closeSettings() }
+                onSetEnergyProfile = { launcherViewModel.setEnergyProfile(it) },
+                onToggleAutoNightMode = { launcherViewModel.toggleAutoNightMode() },
+                onToggleNightModeManual = { launcherViewModel.toggleNightModeManual() },
+                onOptimizeRam = { launcherViewModel.optimizeRam(context) },
+                onExportBackup = { callback -> launcherViewModel.exportBackup(callback) },
+                onImportBackup = { json -> launcherViewModel.importBackup(json, context) },
+                onDismiss = { launcherViewModel.closeSettings() }
             )
         }
 
-        // 4. Create New Category Tab Dialog
-        if (uiState.isNewTabDialogOpen) {
+        // 4. Tab Manager Dialog
+        if (tabUiState.isTabManagerOpen) {
+            TvTabManagerDialog(
+                tabGroups = tabGroups,
+                allApps = allVisibleApps,
+                onAddTab = { tabViewModel.openCreateTabDialog() },
+                onEditTab = { tab -> tabViewModel.openEditTabDialog(tab) },
+                onDeleteTab = { tabId -> tabViewModel.deleteTab(tabId) },
+                onMoveTabUp = { tabId -> tabViewModel.moveTabUp(tabId) },
+                onMoveTabDown = { tabId -> tabViewModel.moveTabDown(tabId) },
+                onManageAppsForTab = { tab -> tabViewModel.openManageAppsDialog(tab) },
+                onDismiss = { tabViewModel.closeTabManager() }
+            )
+        }
+
+        // 5. Create New Custom Tab Dialog (with instant app grouping)
+        if (tabUiState.isCreateTabOpen) {
             NewTabDialog(
-                onAddTab = { title, iconName -> viewModel.addCustomCategory(title, iconName) },
-                onDismiss = { viewModel.closeNewTabDialog() }
+                allApps = allVisibleApps,
+                onAddTab = { title, iconName, colorHex, initialPackages ->
+                    val success = tabViewModel.createTab(title, iconName, colorHex, initialPackages)
+                    if (success) {
+                        launcherViewModel.selectTab(tabUiState.selectedTabId)
+                    }
+                },
+                onDismiss = { tabViewModel.closeCreateTabDialog() }
+            )
+        }
+
+        // 6. Edit Tab Dialog
+        tabUiState.tabBeingEdited?.let { tab ->
+            TabEditDialog(
+                tab = tab,
+                onSave = { newTitle, newIcon, newColor ->
+                    tabViewModel.updateTab(tab.id, newTitle, newIcon, newColor)
+                },
+                onDismiss = { tabViewModel.closeEditTabDialog() }
+            )
+        }
+
+        // 7. Group / Assign Apps to Tab Dialog
+        tabUiState.tabBeingManagedApps?.let { tab ->
+            TabAppAssignmentDialog(
+                tab = tab,
+                allApps = allVisibleApps,
+                onSaveAssignments = { selectedPackages ->
+                    tabViewModel.batchAssignApps(selectedPackages, tab.id)
+                },
+                onDismiss = { tabViewModel.closeManageAppsDialog() }
             )
         }
     }

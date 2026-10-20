@@ -24,8 +24,23 @@ data class CategoryTab(
     @PrimaryKey val id: String,
     val title: String,
     val iconName: String = "apps",
+    val colorHex: String = "#38BDF8",
     val isCustom: Boolean = false,
-    val orderIndex: Int = 0
+    val orderIndex: Int = 0,
+    val isProtected: Boolean = false
+)
+
+data class TabGroupWithApps(
+    val tab: CategoryTab,
+    val apps: List<AppItem>,
+    val appCount: Int = apps.size
+)
+
+data class TabCreationRequest(
+    val title: String,
+    val iconName: String = "apps",
+    val colorHex: String = "#38BDF8",
+    val assignedPackageNames: List<String> = emptyList()
 )
 
 @Entity(tableName = "widgets")
@@ -55,7 +70,7 @@ data class SystemStats(
 
 data class CloudBackupPayload(
     val exportDate: Long = System.currentTimeMillis(),
-    val appVersion: String = "1.0.0",
+    val appVersion: String = "1.1.0",
     val categories: List<CategoryTab>,
     val apps: List<AppItem>,
     val energyProfile: String,

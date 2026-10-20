@@ -1,0 +1,94 @@
+name: Build Debug APK for Android TV
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths-ignore:
+      - '**.md'
+      - '.gitignore'
+  pull_request:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Tipo de compilación'
+        required: true
+        default: 'debug'
+        type: choice
+        options:
+          - debug
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build & Export APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: 📥 Clonar repositorio
+        uses: actions/checkout@v4
+
+      - name: ☕ Configurar Java JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: 🤖 Configurar Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: ⚡ Configurar y cachear Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+
+      - name: 🛡️ Prevenir errores de entorno (.env y permisos)
+        run: |
+          # 1. Asegurar permisos de ejecución en gradlew
+          chmod +x gradlew || true
+          
+          # 2. Asegurar que .env exista para el Secrets Gradle Plugin
+          if [ ! -f .env ]; then
+            if [ -f .env.example ]; then
+              cp .env.example .env
+            else
+              touch .env
+            fi
+          fi
+          
+          # 3. Aceptar licencias de Android SDK automáticamente
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+
+      - name: 🔨 Compilar APK Depurada (assembleDebug)
+        run: |
+          ./gradlew assembleDebug --stacktrace --no-daemon
+
+      - name: 🔍 Verificar APK generada
+        id: find_apk
+        run: |
+          APK_PATH=$(find app/build/outputs/apk/debug -name "*.apk" -type f | head -n 1)
+          if [ -z "$APK_PATH" ]; then
+            echo "❌ Error: No se encontró el archivo APK generado."
+            exit 1
+          fi
+          echo "✅ APK encontrada: $APK_PATH"
+          echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
+          
+          # Mostrar tamaño del APK
+          ls -lh "$APK_PATH"
+
+      - name: 📦 Subir APK como artefacto de GitHub
+        uses: actions/upload-artifact@v4
+        with:
+          name: NovaTV-Launcher-v1.1-debug
+          path: ${{ steps.find_apk.outputs.apk_path }}
+          retention-days: 30
+          if-no-files-found: error
