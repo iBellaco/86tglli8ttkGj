@@ -5,12 +5,16 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.graphics.drawable.toBitmap
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -94,6 +98,11 @@ fun TvAppCard(
         label = "appBorder"
     )
 
+    val context = LocalContext.current
+    val realAppBitmap = remember(app.packageName) {
+        getAppIconBitmap(context, app.packageName)
+    }
+
     val brandColor = try {
         Color(android.graphics.Color.parseColor(app.iconColorHex))
     } catch (e: Exception) {
@@ -143,20 +152,31 @@ fun TvAppCard(
                 ),
             contentAlignment = Alignment.Center
         ) {
-            // Distinctive Icon Background Accent Circle
-            Box(
-                modifier = Modifier
-                    .size(if (isDockItem) 54.dp else 68.dp)
-                    .clip(CircleShape)
-                    .background(brandColor.copy(alpha = 0.18f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = resolveAppIcon(app.iconType),
+            if (realAppBitmap != null) {
+                // Real Android installed application icon
+                Image(
+                    bitmap = realAppBitmap,
                     contentDescription = app.label,
-                    tint = brandColor,
-                    modifier = Modifier.size(if (isDockItem) 32.dp else 40.dp)
+                    modifier = Modifier
+                        .size(if (isDockItem) 48.dp else 60.dp)
+                        .clip(RoundedCornerShape(14.dp))
                 )
+            } else {
+                // Distinctive Icon Background Accent Circle (fallback)
+                Box(
+                    modifier = Modifier
+                        .size(if (isDockItem) 54.dp else 68.dp)
+                        .clip(CircleShape)
+                        .background(brandColor.copy(alpha = 0.18f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = resolveAppIcon(app.iconType),
+                        contentDescription = app.label,
+                        tint = brandColor,
+                        modifier = Modifier.size(if (isDockItem) 32.dp else 40.dp)
+                    )
+                }
             }
 
             // Top Badges (Favorite & Pin)
@@ -260,3 +280,33 @@ fun resolveAppIcon(iconType: String): ImageVector {
         else -> Icons.Default.Tv
     }
 }
+
+fun getAppIconBitmap(context: android.content.Context, packageName: String): androidx.compose.ui.graphics.ImageBitmap? {
+    return try {
+        val pm = context.packageManager
+        val drawable = try {
+            pm.getApplicationBanner(packageName)
+        } catch (e: Exception) {
+            null
+        } ?: pm.getApplicationIcon(packageName)
+
+        if (drawable is android.graphics.drawable.BitmapDrawable && drawable.bitmap != null && !drawable.bitmap.isRecycled) {
+            drawable.bitmap.asImageBitmap()
+        } else {
+            val width = if (drawable.intrinsicWidth > 0) drawable.intrinsicWidth else 128
+            val height = if (drawable.intrinsicHeight > 0) drawable.intrinsicHeight else 128
+            val bitmap = android.graphics.Bitmap.createBitmap(
+                width.coerceIn(48, 256),
+                height.coerceIn(48, 256),
+                android.graphics.Bitmap.Config.ARGB_8888
+            )
+            val canvas = android.graphics.Canvas(bitmap)
+            drawable.setBounds(0, 0, canvas.width, canvas.height)
+            drawable.draw(canvas)
+            bitmap.asImageBitmap()
+        }
+    } catch (e: Exception) {
+        null
+    }
+}
+

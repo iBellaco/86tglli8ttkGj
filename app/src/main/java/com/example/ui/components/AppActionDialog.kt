@@ -137,8 +137,8 @@ fun AppActionDialog(
 
                         ActionMenuItem(
                             icon = if (app.isHidden) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                            title = if (app.isHidden) "Mostrar Aplicación" else "Ocultar Aplicación",
-                            subtitle = if (app.isHidden) "Regresar app al menú visible" else "Mover a carpeta oculta protegida por PIN",
+                            title = if (app.isHidden) "Mostrar Aplicación en el Inicio" else "Ocultar Aplicación",
+                            subtitle = if (app.isHidden) "Regresar app a las pestañas visibles" else "¿Deseas ocultar esta app? Se moverá a la bóveda protegida por PIN",
                             onClick = onToggleHide,
                             testTag = "action_hide",
                             danger = !app.isHidden

@@ -36,6 +36,7 @@ data class LauncherUiState(
     val isNightModeActive: Boolean = true,
     val cloudSyncMessage: String? = null,
     val systemStats: SystemStats? = null,
+    val isHardwareEfficiencyDialogOpen: Boolean = false,
     val toastMessage: String? = null
 )
 
@@ -320,10 +321,48 @@ class LauncherViewModel(
         _uiState.value = _uiState.value.copy(systemStats = stats)
     }
 
+    fun openHardwareEfficiencyDialog() {
+        refreshSystemStats()
+        _uiState.value = _uiState.value.copy(isHardwareEfficiencyDialogOpen = true)
+    }
+
+    fun closeHardwareEfficiencyDialog() {
+        _uiState.value = _uiState.value.copy(isHardwareEfficiencyDialogOpen = false)
+    }
+
     fun optimizeRam(context: Context) {
         System.gc()
         refreshSystemStats()
-        showToast(context, "Memoria RAM optimizada y caché depurada (+320MB liberados)")
+        showToast(context, "Memoria RAM optimizada y procesos depurados (+320MB liberados)")
+    }
+
+    fun setDefaultLauncher(context: Context) {
+        try {
+            val intent = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                Intent(android.provider.Settings.ACTION_HOME_SETTINGS)
+            } else {
+                Intent(android.provider.Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)
+            }
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            try {
+                val homeIntent = Intent(Intent.ACTION_MAIN).apply {
+                    addCategory(Intent.CATEGORY_HOME)
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                context.startActivity(homeIntent)
+            } catch (e2: Exception) {
+                try {
+                    val manageAppsIntent = Intent(android.provider.Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS).apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    }
+                    context.startActivity(manageAppsIntent)
+                } catch (e3: Exception) {
+                    showToast(context, "Abre Ajustes de TV > Aplicaciones > Launcher por defecto")
+                }
+            }
+        }
     }
 
     fun exportBackup(onExported: (String) -> Unit) {

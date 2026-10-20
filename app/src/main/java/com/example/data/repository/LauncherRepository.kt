@@ -58,14 +58,38 @@ class LauncherRepository(
         }
 
         val existingApps = dao.getAllApps().first()
+        val installedApps = scanInstalledApps()
+        val packageManager = context.packageManager
+
         if (existingApps.isEmpty()) {
-            val installedApps = scanInstalledApps()
             val appsToInsert = if (installedApps.isNotEmpty()) {
                 installedApps
             } else {
                 getPreconfiguredTvApps()
             }
             dao.insertApps(appsToInsert)
+        } else {
+            // If real apps are installed, remove obsolete placeholder apps that are not installed
+            if (installedApps.isNotEmpty()) {
+                for (existing in existingApps) {
+                    val isActuallyInstalled = try {
+                        packageManager.getLaunchIntentForPackage(existing.packageName) != null ||
+                                packageManager.getLeanbackLaunchIntentForPackage(existing.packageName) != null
+                    } catch (e: Exception) { false }
+
+                    if (!isActuallyInstalled) {
+                        dao.deleteApp(existing.packageName)
+                    }
+                }
+            }
+
+            // Check if any new apps have been installed on the device and add them
+            val currentDbApps = dao.getAllApps().first()
+            val existingMap = currentDbApps.associateBy { it.packageName }
+            val newApps = installedApps.filter { !existingMap.containsKey(it.packageName) }
+            if (newApps.isNotEmpty()) {
+                dao.insertApps(newApps)
+            }
         }
     }
 
@@ -81,52 +105,93 @@ class LauncherRepository(
         val resolvedSet = mutableSetOf<String>()
         val result = mutableListOf<AppItem>()
 
-        val leanbackResolveInfos = packageManager.queryIntentActivities(leanbackIntent, 0)
-        for (info in leanbackResolveInfos) {
-            val pkg = info.activityInfo.packageName
-            if (pkg != context.packageName && !resolvedSet.contains(pkg)) {
-                resolvedSet.add(pkg)
-                val label = info.loadLabel(packageManager).toString()
-                result.add(
-                    AppItem(
-                        packageName = pkg,
-                        activityName = info.activityInfo.name,
-                        label = label,
-                        iconType = guessAppIconType(pkg, label),
-                        iconColorHex = guessAppColor(pkg),
-                        categoryId = guessCategory(pkg, label),
-                        isFavorite = pkg.contains("youtube") || pkg.contains("netflix"),
-                        isPinnedToDock = pkg.contains("youtube") || pkg.contains("netflix") || result.size < 4,
-                        orderIndex = result.size
+        // 1. Leanback launcher TV activities
+        try {
+            val leanbackResolveInfos = packageManager.queryIntentActivities(leanbackIntent, 0)
+            for (info in leanbackResolveInfos) {
+                val pkg = info.activityInfo.packageName
+                if (pkg != context.packageName && !resolvedSet.contains(pkg)) {
+                    resolvedSet.add(pkg)
+                    val label = info.loadLabel(packageManager).toString()
+                    result.add(
+                        AppItem(
+                            packageName = pkg,
+                            activityName = info.activityInfo.name,
+                            label = label,
+                            iconType = guessAppIconType(pkg, label),
+                            iconColorHex = guessAppColor(pkg),
+                            categoryId = guessCategory(pkg, label),
+                            isFavorite = result.size < 2,
+                            isPinnedToDock = result.size < 4,
+                            orderIndex = result.size
+                        )
                     )
-                )
+                }
             }
+        } catch (e: Exception) {
+            // Ignore
         }
 
-        val standardResolveInfos = packageManager.queryIntentActivities(mainIntent, 0)
-        for (info in standardResolveInfos) {
-            val pkg = info.activityInfo.packageName
-            if (pkg != context.packageName && !resolvedSet.contains(pkg)) {
-                resolvedSet.add(pkg)
-                val label = info.loadLabel(packageManager).toString()
-                result.add(
-                    AppItem(
-                        packageName = pkg,
-                        activityName = info.activityInfo.name,
-                        label = label,
-                        iconType = guessAppIconType(pkg, label),
-                        iconColorHex = guessAppColor(pkg),
-                        categoryId = guessCategory(pkg, label),
-                        isFavorite = false,
-                        isPinnedToDock = result.size < 4,
-                        orderIndex = result.size
+        // 2. Standard launcher activities
+        try {
+            val standardResolveInfos = packageManager.queryIntentActivities(mainIntent, 0)
+            for (info in standardResolveInfos) {
+                val pkg = info.activityInfo.packageName
+                if (pkg != context.packageName && !resolvedSet.contains(pkg)) {
+                    resolvedSet.add(pkg)
+                    val label = info.loadLabel(packageManager).toString()
+                    result.add(
+                        AppItem(
+                            packageName = pkg,
+                            activityName = info.activityInfo.name,
+                            label = label,
+                            iconType = guessAppIconType(pkg, label),
+                            iconColorHex = guessAppColor(pkg),
+                            categoryId = guessCategory(pkg, label),
+                            isFavorite = false,
+                            isPinnedToDock = result.size < 4,
+                            orderIndex = result.size
+                        )
                     )
-                )
+                }
             }
+        } catch (e: Exception) {
+            // Ignore
         }
 
-        // If very few system apps are present on emulator, supplement with popular TV suite
-        if (result.size < 8) {
+        // 3. Scan all installed packages with launch intent to catch sideloaded or TV OEM apps
+        try {
+            val installedAppsList = packageManager.getInstalledApplications(PackageManager.GET_META_DATA)
+            for (appInfo in installedAppsList) {
+                val pkg = appInfo.packageName
+                if (pkg != context.packageName && !resolvedSet.contains(pkg)) {
+                    val launchIntent = packageManager.getLaunchIntentForPackage(pkg)
+                        ?: packageManager.getLeanbackLaunchIntentForPackage(pkg)
+                    if (launchIntent != null) {
+                        resolvedSet.add(pkg)
+                        val label = appInfo.loadLabel(packageManager).toString()
+                        result.add(
+                            AppItem(
+                                packageName = pkg,
+                                activityName = launchIntent.component?.className ?: "",
+                                label = label,
+                                iconType = guessAppIconType(pkg, label),
+                                iconColorHex = guessAppColor(pkg),
+                                categoryId = guessCategory(pkg, label),
+                                isFavorite = false,
+                                isPinnedToDock = result.size < 4,
+                                orderIndex = result.size
+                            )
+                        )
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            // Ignore
+        }
+
+        // If no apps at all detected (e.g. fresh barebones headless unit), supply TV starter suite
+        if (result.isEmpty()) {
             val preconfigured = getPreconfiguredTvApps()
             for (p in preconfigured) {
                 if (!resolvedSet.contains(p.packageName)) {

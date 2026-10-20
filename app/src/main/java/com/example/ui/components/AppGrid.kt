@@ -85,18 +85,16 @@ fun AppGrid(
         focusedIndex?.let { index ->
             val layoutInfo = gridState.layoutInfo
             val visibleItems = layoutInfo.visibleItemsInfo
-            val isVisible = visibleItems.any { it.index == index }
+            val itemInfo = visibleItems.firstOrNull { it.index == index }
 
-            if (!isVisible) {
-                // Smooth scroll to row
+            if (itemInfo == null) {
+                // Not visible, scroll into view
                 gridState.animateScrollToItem(index)
             } else {
-                // If it's near the bottom visible edge, nudge forward so the next row is previewed
-                val lastVisible = visibleItems.lastOrNull()?.index ?: 0
-                if (index >= lastVisible - 1 && lastVisible < apps.size - 1) {
-                    coroutineScope.launch {
-                        gridState.animateScrollToItem((index + columnsCount).coerceAtMost(apps.size - 1))
-                    }
+                // If it is partially cut off at the bottom, scroll down to bring it fully into view
+                val viewportEnd = layoutInfo.viewportEndOffset - layoutInfo.afterContentPadding
+                if (itemInfo.offset.y + itemInfo.size.height > viewportEnd - 40) {
+                    gridState.animateScrollToItem(index)
                 }
             }
         }
@@ -113,7 +111,7 @@ fun AppGrid(
         }
     }
 
-    Column(
+    Box(
         modifier = modifier
             .fillMaxSize()
             .testTag("app_grid_container")
@@ -122,8 +120,7 @@ fun AppGrid(
             // Empty State
             Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
+                    .fillMaxSize()
                     .padding(32.dp),
                 contentAlignment = Alignment.Center
             ) {
@@ -166,8 +163,7 @@ fun AppGrid(
                 columns = GridCells.Fixed(columnsCount),
                 state = gridState,
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
+                    .fillMaxSize()
                     .onKeyEvent { keyEvent ->
                         if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
                             when (keyEvent.nativeKeyEvent.keyCode) {
@@ -192,7 +188,7 @@ fun AppGrid(
                     start = 24.dp,
                     end = 24.dp,
                     top = 10.dp,
-                    bottom = 28.dp
+                    bottom = 76.dp
                 ),
                 horizontalArrangement = Arrangement.spacedBy(18.dp),
                 verticalArrangement = Arrangement.spacedBy(18.dp)
@@ -219,11 +215,12 @@ fun AppGrid(
             }
         }
 
-        // TV Remote Navigation Feedback & Shortcut Hints Bar
+        // TV Remote Navigation Feedback & Shortcut Hints Bar as non-intrusive bottom overlay
         AnimatedVisibility(
             visible = focusedApp != null && apps.isNotEmpty(),
             enter = fadeIn(animationSpec = tween(150)),
-            exit = fadeOut(animationSpec = tween(150))
+            exit = fadeOut(animationSpec = tween(150)),
+            modifier = Modifier.align(Alignment.BottomCenter)
         ) {
             focusedApp?.let { app ->
                 val currentIndex = (focusedIndex ?: 0) + 1
@@ -232,7 +229,7 @@ fun AppGrid(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.92f))
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.94f))
                         .border(
                             width = 1.dp,
                             color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)

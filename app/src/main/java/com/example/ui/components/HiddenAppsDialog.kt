@@ -35,6 +35,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -66,6 +67,12 @@ fun HiddenAppsDialog(
     onDismiss: () -> Unit
 ) {
     var enteredPin by remember { mutableStateOf("") }
+
+    LaunchedEffect(pinError) {
+        if (pinError != null) {
+            enteredPin = ""
+        }
+    }
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -184,15 +191,24 @@ fun HiddenAppsDialog(
                                                     }
                                                     "OK" -> {
                                                         if (enteredPin.length == 4) {
-                                                            onUnlockWithPin(enteredPin)
+                                                            val ok = onUnlockWithPin(enteredPin)
+                                                            if (!ok) {
+                                                                enteredPin = ""
+                                                            }
                                                         }
                                                     }
                                                     else -> {
                                                         if (enteredPin.length < 4) {
                                                             val next = enteredPin + digit
-                                                            enteredPin = next
                                                             if (next.length == 4) {
-                                                                onUnlockWithPin(next)
+                                                                val ok = onUnlockWithPin(next)
+                                                                if (!ok) {
+                                                                    enteredPin = ""
+                                                                } else {
+                                                                    enteredPin = next
+                                                                }
+                                                            } else {
+                                                                enteredPin = next
                                                             }
                                                         }
                                                     }

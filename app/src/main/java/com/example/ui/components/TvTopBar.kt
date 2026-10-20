@@ -191,14 +191,6 @@ fun TvTopBar(
                 testTag = "hidden_apps_top_button"
             )
 
-            // Cloud Sync Button
-            TvHeaderIconButton(
-                icon = Icons.Default.CloudSync,
-                contentDesc = "Sincronización en la Nube",
-                onClick = onCloudSyncClick,
-                testTag = "cloud_sync_top_button"
-            )
-
             // Settings Button
             TvHeaderIconButton(
                 icon = Icons.Default.Settings,

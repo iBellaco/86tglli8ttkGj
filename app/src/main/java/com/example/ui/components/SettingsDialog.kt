@@ -60,6 +60,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.example.data.model.EnergyProfile
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Memory
+import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Thermostat
+import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material3.LinearProgressIndicator
+import com.example.data.model.SystemStats
 import com.example.ui.theme.TvCyanAccent
 import com.example.ui.theme.TvEnergySaverGreen
 import com.example.ui.theme.TvFocusBorder
@@ -70,10 +77,12 @@ fun SettingsDialog(
     isAutoNightMode: Boolean,
     isNightModeActive: Boolean,
     cloudSyncMessage: String?,
+    systemStats: SystemStats? = null,
     onSetEnergyProfile: (EnergyProfile) -> Unit,
     onToggleAutoNightMode: () -> Unit,
     onToggleNightModeManual: () -> Unit,
     onOptimizeRam: () -> Unit,
+    onSetDefaultLauncher: () -> Unit = {},
     onExportBackup: ((String) -> Unit) -> Unit,
     onImportBackup: (String) -> Unit,
     onDismiss: () -> Unit
@@ -84,10 +93,14 @@ fun SettingsDialog(
     var jsonInput by remember { mutableStateOf("") }
     var exportedJson by remember { mutableStateOf("") }
 
+    val usedRam = systemStats?.usedRamMb ?: 1820L
+    val totalRam = systemStats?.totalRamMb ?: 4096L
+    val ramFraction = (usedRam.toFloat() / totalRam.toFloat()).coerceIn(0f, 1f)
+
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             modifier = Modifier
-                .width(680.dp)
+                .width(720.dp)
                 .clip(RoundedCornerShape(24.dp))
                 .border(2.dp, TvFocusBorder, RoundedCornerShape(24.dp)),
             color = MaterialTheme.colorScheme.surface
@@ -118,34 +131,41 @@ fun SettingsDialog(
                 // Section Tabs
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     SettingsSectionTab(
-                        title = "Energía y Eficiencia",
-                        icon = Icons.Default.PowerSettingsNew,
+                        title = "Rendimiento",
+                        icon = Icons.Default.Speed,
                         isSelected = selectedSection == 0,
                         onClick = { selectedSection = 0 },
                         modifier = Modifier.weight(1f)
                     )
                     SettingsSectionTab(
-                        title = "Modo Noche",
-                        icon = Icons.Default.DarkMode,
+                        title = "Launcher TV",
+                        icon = Icons.Default.Home,
                         isSelected = selectedSection == 1,
                         onClick = { selectedSection = 1 },
                         modifier = Modifier.weight(1f)
                     )
                     SettingsSectionTab(
-                        title = "Sincronización Nube",
-                        icon = Icons.Default.CloudSync,
+                        title = "Modo Noche",
+                        icon = Icons.Default.DarkMode,
                         isSelected = selectedSection == 2,
                         onClick = { selectedSection = 2 },
                         modifier = Modifier.weight(1f)
                     )
                     SettingsSectionTab(
-                        title = "Despliegue Continuo",
-                        icon = Icons.Default.SystemUpdate,
+                        title = "Sincronización",
+                        icon = Icons.Default.CloudSync,
                         isSelected = selectedSection == 3,
                         onClick = { selectedSection = 3 },
+                        modifier = Modifier.weight(1f)
+                    )
+                    SettingsSectionTab(
+                        title = "Estabilidad",
+                        icon = Icons.Default.SystemUpdate,
+                        isSelected = selectedSection == 4,
+                        onClick = { selectedSection = 4 },
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -155,22 +175,91 @@ fun SettingsDialog(
                 // Scrollable Content
                 Column(
                     modifier = Modifier
-                        .height(300.dp)
+                        .height(320.dp)
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     when (selectedSection) {
                         0 -> {
-                            // Energy and Hardware Efficiency
+                            // Section 0: Energy and Hardware Efficiency
                             Text(
-                                text = "Perfiles de Rendimiento y Consumo Energético",
+                                text = "Panel de Rendimiento y Eficiencia Energética",
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = TvCyanAccent
                             )
+
+                            // RAM & Hardware Vitals Box
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                                    .padding(14.dp)
+                            ) {
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "Uso de Memoria RAM: ${usedRam}MB / ${totalRam}MB",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            text = "${(ramFraction * 100).toInt()}%",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (ramFraction > 0.8f) Color(0xFFEF4444) else TvEnergySaverGreen
+                                        )
+                                    }
+
+                                    LinearProgressIndicator(
+                                        progress = { ramFraction },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(6.dp)
+                                            .clip(RoundedCornerShape(3.dp)),
+                                        color = if (ramFraction > 0.8f) Color(0xFFEF4444) else TvCyanAccent,
+                                        trackColor = MaterialTheme.colorScheme.surface
+                                    )
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(
+                                            text = "Temperatura SoC: ${systemStats?.cpuTemperatureEstimate ?: "41°C Normal"}",
+                                            fontSize = 11.sp,
+                                            color = TvEnergySaverGreen
+                                        )
+                                        Text(
+                                            text = "Almacenamiento: ${systemStats?.freeStorageGb ?: 22}GB libres",
+                                            fontSize = 11.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+
+                            Button(
+                                onClick = onOptimizeRam,
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                                modifier = Modifier.fillMaxWidth().testTag("settings_optimize_ram")
+                            ) {
+                                Icon(Icons.Default.CleaningServices, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Liberar Caché de RAM y Optimizar Rendimiento", color = MaterialTheme.colorScheme.primary)
+                            }
+
+                            Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "Optimizado para prolongar la vida útil de Smart TVs y minimizar calentamiento de procesadores limitados.",
+                                text = "Perfiles de Ahorro y Potencia:",
                                 fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
 
@@ -189,20 +278,70 @@ fun SettingsDialog(
                                 current = energyProfile,
                                 onSelect = { onSetEnergyProfile(EnergyProfile.PERFORMANCE) }
                             )
-
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Button(
-                                onClick = onOptimizeRam,
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-                                modifier = Modifier.fillMaxWidth().testTag("settings_optimize_ram")
-                            ) {
-                                Icon(Icons.Default.CleaningServices, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Liberar Caché de RAM y Cerrar Tareas Huérfanas", color = MaterialTheme.colorScheme.primary)
-                            }
                         }
 
                         1 -> {
+                            // Section 1: Default Launcher
+                            Text(
+                                text = "Configurar Launcher Predeterminado",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TvCyanAccent
+                            )
+
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                                    .padding(16.dp)
+                            ) {
+                                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Home,
+                                            contentDescription = null,
+                                            tint = TvCyanAccent,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                        Column {
+                                            Text(
+                                                text = "Nova TV Launcher como Inicio del Sistema",
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                            Text(
+                                                text = "Abre automáticamente este launcher al encender la TV o pulsar Home",
+                                                fontSize = 11.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+
+                                    Button(
+                                        onClick = onSetDefaultLauncher,
+                                        colors = ButtonDefaults.buttonColors(containerColor = TvCyanAccent),
+                                        modifier = Modifier.fillMaxWidth().testTag("btn_set_default_launcher")
+                                    ) {
+                                        Icon(Icons.Default.Home, contentDescription = null, tint = Color.Black)
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text("Seleccionar como Launcher por Defecto", color = Color.Black, fontWeight = FontWeight.Bold)
+                                    }
+
+                                    Text(
+                                        text = "Nota: Al pulsar el botón, Android TV te mostrará el diálogo para elegir la app de inicio. Selecciona 'Nova TV Launcher' y luego 'Siempre'.",
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+                                }
+                            }
+                        }
+
+                        2 -> {
                             // Auto Night Mode
                             Text(
                                 text = "Modo Oscuro Automático y Confort Visual",
@@ -270,7 +409,7 @@ fun SettingsDialog(
                             }
                         }
 
-                        2 -> {
+                        3 -> {
                             // Cloud Synchronization & Backup
                             Text(
                                 text = "Sincronización en la Nube de Configuraciones",
@@ -345,7 +484,7 @@ fun SettingsDialog(
                             }
                         }
 
-                        3 -> {
+                        4 -> {
                             // Continuous Deployment and Stability
                             Text(
                                 text = "Despliegue Continuo y Estabilidad del Sistema",

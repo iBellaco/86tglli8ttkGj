@@ -56,6 +56,7 @@ import com.example.data.local.LauncherDatabase
 import com.example.data.repository.LauncherRepository
 import com.example.ui.components.AppActionDialog
 import com.example.ui.components.AppGrid
+import com.example.ui.components.HardwareEfficiencyDialog
 import com.example.ui.components.HiddenAppsDialog
 import com.example.ui.components.NewTabDialog
 import com.example.ui.components.SettingsDialog
@@ -116,6 +117,7 @@ class MainActivity : ComponentActivity() {
                             uiState.selectedAppForActions != null ||
                             uiState.isSettingsOpen ||
                             uiState.isCloudSyncOpen ||
+                            uiState.isHardwareEfficiencyDialogOpen ||
                             uiState.selectedTabId == "hidden" ||
                             uiState.searchQuery.isNotEmpty() ||
                             tabUiState.isTabManagerOpen ||
@@ -132,6 +134,7 @@ class MainActivity : ComponentActivity() {
                         uiState.selectedAppForActions != null -> launcherViewModel.selectAppForActions(null)
                         uiState.isSettingsOpen -> launcherViewModel.closeSettings()
                         uiState.isCloudSyncOpen -> launcherViewModel.closeCloudSync()
+                        uiState.isHardwareEfficiencyDialogOpen -> launcherViewModel.closeHardwareEfficiencyDialog()
                         uiState.searchQuery.isNotEmpty() -> launcherViewModel.updateSearchQuery("")
                         uiState.selectedTabId == "hidden" -> launcherViewModel.lockHiddenApps()
                     }
@@ -206,16 +209,10 @@ fun NovaTvLauncherScreen(
                 onToggleHiddenClick = { launcherViewModel.selectTab("hidden") },
                 onCloudSyncClick = { launcherViewModel.openSettings() },
                 onSettingsClick = { launcherViewModel.openSettings() },
-                onEnergyProfileClick = { launcherViewModel.openSettings() }
+                onEnergyProfileClick = { launcherViewModel.openHardwareEfficiencyDialog() }
             )
 
-            // 2. Dynamic Widgets Row (Hardware Performance & Efficiency, TV Inputs)
-            TvWidgetsRow(
-                systemStats = uiState.systemStats,
-                onOptimizeRamClick = { launcherViewModel.optimizeRam(context) }
-            )
-
-            // 3. Quick Access Dock (1-click pinned favorite apps)
+            // 2. Quick Access Dock (1-click pinned favorite apps)
             TvQuickAccessDock(
                 dockApps = dockApps,
                 onLaunchApp = { app -> launcherViewModel.launchApp(context, app) },
@@ -311,17 +308,30 @@ fun NovaTvLauncherScreen(
             )
         }
 
-        // 3. Settings & Cloud Sync Dialog
+        // 3. Hardware Performance & Efficiency Dialog (Animated & Reduced)
+        if (uiState.isHardwareEfficiencyDialogOpen) {
+            HardwareEfficiencyDialog(
+                systemStats = uiState.systemStats,
+                energyProfile = uiState.energyProfile,
+                onSetEnergyProfile = { launcherViewModel.setEnergyProfile(it) },
+                onOptimizeRam = { launcherViewModel.optimizeRam(context) },
+                onDismiss = { launcherViewModel.closeHardwareEfficiencyDialog() }
+            )
+        }
+
+        // 4. Settings & Cloud Sync Dialog
         if (uiState.isSettingsOpen) {
             SettingsDialog(
                 energyProfile = uiState.energyProfile,
                 isAutoNightMode = uiState.isAutoNightMode,
                 isNightModeActive = uiState.isNightModeActive,
                 cloudSyncMessage = uiState.cloudSyncMessage,
+                systemStats = uiState.systemStats,
                 onSetEnergyProfile = { launcherViewModel.setEnergyProfile(it) },
                 onToggleAutoNightMode = { launcherViewModel.toggleAutoNightMode() },
                 onToggleNightModeManual = { launcherViewModel.toggleNightModeManual() },
                 onOptimizeRam = { launcherViewModel.optimizeRam(context) },
+                onSetDefaultLauncher = { launcherViewModel.setDefaultLauncher(context) },
                 onExportBackup = { callback -> launcherViewModel.exportBackup(callback) },
                 onImportBackup = { json -> launcherViewModel.importBackup(json, context) },
                 onDismiss = { launcherViewModel.closeSettings() }

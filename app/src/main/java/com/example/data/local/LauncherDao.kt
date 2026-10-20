@@ -57,6 +57,9 @@ interface LauncherDao {
     @Query("UPDATE apps SET launchCount = launchCount + 1, lastLaunched = :time WHERE packageName = :packageName")
     suspend fun incrementLaunch(packageName: String, time: Long)
 
+    @Query("DELETE FROM apps WHERE packageName = :packageName")
+    suspend fun deleteApp(packageName: String)
+
     // Categories
     @Query("SELECT * FROM categories ORDER BY orderIndex ASC")
     fun getAllCategories(): Flow<List<CategoryTab>>
