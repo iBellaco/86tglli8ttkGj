@@ -7,7 +7,6 @@ on:
       - master
     paths-ignore:
       - '**.md'
-      - '.gitignore'
   pull_request:
     branches:
       - main
@@ -30,7 +29,7 @@ jobs:
   build:
     name: Build & Export APK
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 25
 
     steps:
       - name: 📥 Clonar repositorio
@@ -41,21 +40,27 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
+          cache: 'gradle'
 
-      - name: 🤖 Configurar Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: ⚡ Configurar y cachear Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          cache-read-only: false
-
-      - name: 🛡️ Prevenir errores de entorno (.env y permisos)
+      - name: 🛡️ Configurar entorno (Keystore, .env y Licencias SDK)
         run: |
-          # 1. Asegurar permisos de ejecución en gradlew
+          echo "=== 1. Permisos del wrapper de Gradle ==="
           chmod +x gradlew || true
-          
-          # 2. Asegurar que .env exista para el Secrets Gradle Plugin
+
+          echo "=== 2. Configurar debug.keystore (Requerido por build.gradle.kts) ==="
+          # En GitHub Actions, debug.keystore está en .gitignore.
+          # Lo decodificamos desde debug.keystore.base64 o lo generamos si falta.
+          if [ ! -f debug.keystore ]; then
+            if [ -f debug.keystore.base64 ]; then
+              echo "Decodificando debug.keystore desde debug.keystore.base64..."
+              base64 -d debug.keystore.base64 > debug.keystore
+            else
+              echo "Generando debug.keystore estándar de desarrollo..."
+              keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+            fi
+          fi
+
+          echo "=== 3. Configurar archivo .env para Secrets Gradle Plugin ==="
           if [ ! -f .env ]; then
             if [ -f .env.example ]; then
               cp .env.example .env
@@ -63,32 +68,34 @@ jobs:
               touch .env
             fi
           fi
-          
-          # 3. Aceptar licencias de Android SDK automáticamente
-          yes | sdkmanager --licenses > /dev/null 2>&1 || true
 
-      - name: 🔨 Compilar APK Depurada (assembleDebug)
+          echo "=== 4. Aceptar licencias de Android SDK ==="
+          mkdir -p "$ANDROID_HOME/licenses" || true
+          echo -e "\n24333f8a63b6825ea9c5514f83c2829b004d1fee" > "$ANDROID_HOME/licenses/android-sdk-license" || true
+          echo -e "\n84831b9409646a918e30573bab4c9c91346d8abd" > "$ANDROID_HOME/licenses/android-sdk-preview-license" || true
+          echo -e "\nd975f751698a77b662f1254ddbeed3901e976f5a" > "$ANDROID_HOME/licenses/intel-android-extra-license" || true
+          echo -e "\ne9acab5b5fbb560a72cfa4f69c30ed2e0d60be8d" > "$ANDROID_HOME/licenses/mips-android-extra-license" || true
+
+      - name: 🔨 Compilar APK Depurada (:app:assembleDebug)
         run: |
-          ./gradlew assembleDebug --stacktrace --no-daemon
+          ./gradlew :app:assembleDebug --stacktrace --no-daemon
 
-      - name: 🔍 Verificar APK generada
+      - name: 🔍 Localizar y Verificar APK generada
         id: find_apk
         run: |
           APK_PATH=$(find app/build/outputs/apk/debug -name "*.apk" -type f | head -n 1)
           if [ -z "$APK_PATH" ]; then
-            echo "❌ Error: No se encontró el archivo APK generado."
+            echo "❌ Error crítico: No se encontró el archivo APK generado."
             exit 1
           fi
-          echo "✅ APK encontrada: $APK_PATH"
+          echo "✅ APK generada con éxito: $APK_PATH"
           echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
-          
-          # Mostrar tamaño del APK
           ls -lh "$APK_PATH"
 
-      - name: 📦 Subir APK como artefacto de GitHub
+      - name: 📦 Subir APK a Artefactos de GitHub
         uses: actions/upload-artifact@v4
         with:
-          name: NovaTV-Launcher-v1.2-debug
+          name: NovaTV-Launcher-v1.3-debug
           path: ${{ steps.find_apk.outputs.apk_path }}
           retention-days: 30
           if-no-files-found: error
