@@ -37,6 +37,7 @@ class LauncherRepository(
     val widgets: Flow<List<WidgetItem>> = dao.getAllWidgets()
 
     private val mediaPrefs = context.getSharedPreferences("nova_recent_media_prefs", Context.MODE_PRIVATE)
+    private val prefs = context.getSharedPreferences("nova_launcher_prefs", Context.MODE_PRIVATE)
     private val _recentMedia = MutableStateFlow<List<RecentMediaItem>>(loadRecentMediaFromPrefs())
     val recentMedia: Flow<List<RecentMediaItem>> = _recentMedia
 
@@ -89,13 +90,24 @@ class LauncherRepository(
                 }
             }
 
-            // Check if any new apps have been installed on the device and add them
             val currentDbApps = dao.getAllApps().first()
             val existingMap = currentDbApps.associateBy { it.packageName }
             val newApps = installedApps.filter { !existingMap.containsKey(it.packageName) }
             if (newApps.isNotEmpty()) {
                 dao.insertApps(newApps)
             }
+        }
+
+        // By user requirement: by default NO app is pinned to the dock
+        val hasClearedInitialDock = prefs.getBoolean("default_dock_cleared_v5", false)
+        if (!hasClearedInitialDock) {
+            val allInDb = dao.getAllApps().first()
+            for (app in allInDb) {
+                if (app.isPinnedToDock) {
+                    dao.setAppPinnedToDock(app.packageName, false)
+                }
+            }
+            prefs.edit().putBoolean("default_dock_cleared_v5", true).apply()
         }
     }
 
@@ -128,7 +140,7 @@ class LauncherRepository(
                             iconColorHex = guessAppColor(pkg),
                             categoryId = guessCategory(pkg, label),
                             isFavorite = result.size < 2,
-                            isPinnedToDock = result.size < 4,
+                            isPinnedToDock = false,
                             orderIndex = result.size
                         )
                     )
@@ -155,7 +167,7 @@ class LauncherRepository(
                             iconColorHex = guessAppColor(pkg),
                             categoryId = guessCategory(pkg, label),
                             isFavorite = false,
-                            isPinnedToDock = result.size < 4,
+                            isPinnedToDock = false,
                             orderIndex = result.size
                         )
                     )
@@ -185,7 +197,7 @@ class LauncherRepository(
                                 iconColorHex = guessAppColor(pkg),
                                 categoryId = guessCategory(pkg, label),
                                 isFavorite = false,
-                                isPinnedToDock = result.size < 4,
+                                isPinnedToDock = false,
                                 orderIndex = result.size
                             )
                         )
@@ -218,7 +230,7 @@ class LauncherRepository(
                 iconColorHex = "#EF4444",
                 categoryId = "streaming",
                 isFavorite = true,
-                isPinnedToDock = true,
+                isPinnedToDock = false,
                 orderIndex = 0
             ),
             AppItem(
@@ -228,7 +240,7 @@ class LauncherRepository(
                 iconColorHex = "#E50914",
                 categoryId = "streaming",
                 isFavorite = true,
-                isPinnedToDock = true,
+                isPinnedToDock = false,
                 orderIndex = 1
             ),
             AppItem(
@@ -238,7 +250,7 @@ class LauncherRepository(
                 iconColorHex = "#00A8E1",
                 categoryId = "streaming",
                 isFavorite = true,
-                isPinnedToDock = true,
+                isPinnedToDock = false,
                 orderIndex = 2
             ),
             AppItem(
@@ -248,7 +260,7 @@ class LauncherRepository(
                 iconColorHex = "#113CCF",
                 categoryId = "streaming",
                 isFavorite = true,
-                isPinnedToDock = true,
+                isPinnedToDock = false,
                 orderIndex = 3
             ),
             AppItem(
@@ -258,7 +270,7 @@ class LauncherRepository(
                 iconColorHex = "#1DB954",
                 categoryId = "music",
                 isFavorite = true,
-                isPinnedToDock = true,
+                isPinnedToDock = false,
                 orderIndex = 4
             ),
             AppItem(

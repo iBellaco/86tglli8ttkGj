@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.Calendar
@@ -34,7 +35,7 @@ data class LauncherUiState(
     val isCloudSyncOpen: Boolean = false,
     val isNewTabDialogOpen: Boolean = false,
     val energyProfile: EnergyProfile = EnergyProfile.BALANCED,
-    val isAutoNightMode: Boolean = true,
+    val isAutoNightMode: Boolean = false,
     val isNightModeActive: Boolean = true,
     val cloudSyncMessage: String? = null,
     val systemStats: SystemStats? = null,
@@ -74,18 +75,15 @@ class LauncherViewModel(
 
         var filtered = apps
 
-        // Filter by tab
-        if (tabId != "all") {
-            filtered = when (tabId) {
-                "favorites" -> filtered.filter { it.isFavorite }
-                else -> filtered.filter { it.categoryId == tabId }
-            }
-        }
-
-        // Filter by search query if any
+        // Search query takes precedence and filters across all apps
         if (query.isNotEmpty()) {
             filtered = filtered.filter {
                 it.label.lowercase().contains(query) || it.packageName.lowercase().contains(query)
+            }
+        } else if (tabId != "all") {
+            filtered = when (tabId) {
+                "favorites" -> filtered.filter { it.isFavorite }
+                else -> filtered.filter { it.categoryId == tabId }
             }
         }
 
@@ -101,11 +99,14 @@ class LauncherViewModel(
     }
 
     private fun calculateAutoNightMode() {
-        val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-        val isNight = hour >= 19 || hour < 7
-        _uiState.value = _uiState.value.copy(
-            isNightModeActive = if (_uiState.value.isAutoNightMode) isNight else true
-        )
+        if (_uiState.value.isAutoNightMode) {
+            val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+            val isNight = hour >= 19 || hour < 7
+            _uiState.value = _uiState.value.copy(isNightModeActive = isNight)
+        } else {
+            // Dark theme is active by default
+            _uiState.value = _uiState.value.copy(isNightModeActive = true)
+        }
     }
 
     fun selectTab(tabId: String) {
@@ -135,14 +136,25 @@ class LauncherViewModel(
         )
 
         viewModelScope.launch {
+            val matchTarget = clean
+                .removePrefix("abrir ")
+                .removePrefix("iniciar ")
+                .removePrefix("pon ")
+                .removePrefix("ejecutar ")
+                .removePrefix("buscar ")
+                .trim()
+
             when {
+                clean.contains("play store") || clean.contains("tienda") -> {
+                    openTvPlayStore(context)
+                }
                 clean.contains("noche") || clean.contains("oscuro") -> {
                     _uiState.value = _uiState.value.copy(isNightModeActive = true)
-                    showToast(context, "Modo Oscuro activado por comando de voz")
+                    showToast(context, "Modo Oscuro activado")
                 }
                 clean.contains("día") || clean.contains("claro") -> {
                     _uiState.value = _uiState.value.copy(isNightModeActive = false)
-                    showToast(context, "Modo Claro activado por comando de voz")
+                    showToast(context, "Modo Claro activado")
                 }
                 clean.contains("ajustes") || clean.contains("configuración") -> {
                     openSettings()
@@ -155,14 +167,67 @@ class LauncherViewModel(
                     selectTab("hidden")
                 }
                 else -> {
-                    // Try to match an app name
-                    val all = repository.allApps
-                    // Look through apps for match
-                    val matchTarget = clean.removePrefix("abrir ").removePrefix("iniciar ").removePrefix("pon ")
+                    // Update search query so user immediately sees results in the search bar & grid
                     _uiState.value = _uiState.value.copy(searchQuery = matchTarget)
-                    showToast(context, "Buscando: $matchTarget")
+
+                    val all = repository.visibleApps.first()
+                    val matchedApp = all.find {
+                        it.label.lowercase() == matchTarget ||
+                        it.label.lowercase().contains(matchTarget) ||
+                        it.packageName.lowercase().contains(matchTarget)
+                    }
+
+                    if (clean.startsWith("abrir") || clean.startsWith("iniciar") || clean.startsWith("pon")) {
+                        if (matchedApp != null) {
+                            launchApp(context, matchedApp)
+                        } else {
+                            showToast(context, "Buscando: $matchTarget")
+                        }
+                    } else {
+                        showToast(context, "Buscando: $matchTarget")
+                    }
                 }
             }
+        }
+    }
+
+    fun openTvPlayStore(context: Context) {
+        try {
+            val pm = context.packageManager
+            // 1. Android TV Leanback Play Store Intent
+            val leanbackIntent = Intent(Intent.ACTION_MAIN).apply {
+                addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER)
+                `package` = "com.android.vending"
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            if (leanbackIntent.resolveActivity(pm) != null) {
+                context.startActivity(leanbackIntent)
+                return
+            }
+
+            // 2. Standard Play Store package launch
+            val standardIntent = pm.getLaunchIntentForPackage("com.android.vending")
+            if (standardIntent != null) {
+                standardIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(standardIntent)
+                return
+            }
+
+            // 3. Fallback market details or browser
+            val marketIntent = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=com.google.android.youtube.tv")).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            if (marketIntent.resolveActivity(pm) != null) {
+                context.startActivity(marketIntent)
+                return
+            }
+
+            val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps")).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(webIntent)
+        } catch (e: Exception) {
+            showToast(context, "Abriendo Google Play Store...")
         }
     }
 

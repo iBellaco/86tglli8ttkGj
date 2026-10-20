@@ -70,6 +70,7 @@ import com.example.ui.components.TvAppCard
 import com.example.ui.components.TvCategoryTabs
 import com.example.ui.components.TvQuickAccessDock
 import com.example.ui.components.TvRecentMediaBanner
+import com.example.ui.components.TvSearchBar
 import com.example.ui.components.TvTabManagerDialog
 import com.example.ui.components.TvTopBar
 import com.example.ui.components.TvWidgetsRow
@@ -225,7 +226,6 @@ fun NovaTvLauncherScreen(
                     isHiddenUnlocked = uiState.isHiddenAppsUnlocked,
                     weather = uiState.weatherState,
                     onWeatherClick = { launcherViewModel.cycleWeatherScenario(context) },
-                    onVoiceSearchClick = { launcherViewModel.openVoiceSearch() },
                     onToggleNightMode = { launcherViewModel.toggleNightModeManual() },
                     onToggleHiddenClick = { launcherViewModel.selectTab("hidden") },
                     onCloudSyncClick = { launcherViewModel.openSettings() },
@@ -253,14 +253,13 @@ fun NovaTvLauncherScreen(
                 emptySubMessage = "Pulsa 'Gestionar Pestañas' o mantén pulsado Menú sobre una app para asignarla aquí",
                 headerContent = {
                     Column(modifier = Modifier.fillMaxWidth()) {
-                        // 1. Top Bar (Clock 12h, Weather Large with Min/Max and Alerts, Energy Profile, Voice Search, Settings)
+                        // 1. Top Bar (Clock, Date, Weather with Min/Max & Alerts, Energy Profile, Configuration / Ranura Cog)
                         TvTopBar(
                             energyProfile = uiState.energyProfile,
                             isNightMode = uiState.isNightModeActive,
                             isHiddenUnlocked = uiState.isHiddenAppsUnlocked,
                             weather = uiState.weatherState,
                             onWeatherClick = { launcherViewModel.cycleWeatherScenario(context) },
-                            onVoiceSearchClick = { launcherViewModel.openVoiceSearch() },
                             onToggleNightMode = { launcherViewModel.toggleNightModeManual() },
                             onToggleHiddenClick = { launcherViewModel.selectTab("hidden") },
                             onCloudSyncClick = { launcherViewModel.openSettings() },
@@ -268,7 +267,15 @@ fun NovaTvLauncherScreen(
                             onEnergyProfileClick = { launcherViewModel.openHardwareEfficiencyDialog() }
                         )
 
-                        // 2. Continuar Viendo / Último Video (Only rendered when watch history is NOT empty!)
+                        // 2. Buscador de aplicaciones (Abajo de la hora) + Play Store de la TV + Botón de Micrófono
+                        TvSearchBar(
+                            searchQuery = uiState.searchQuery,
+                            onSearchQueryChange = { launcherViewModel.updateSearchQuery(it) },
+                            onOpenPlayStore = { launcherViewModel.openTvPlayStore(context) },
+                            onVoiceSearchClick = { launcherViewModel.openVoiceSearch() }
+                        )
+
+                        // 3. Continuar Viendo / Último Video (Only rendered when watch history is NOT empty!)
                         TvRecentMediaBanner(
                             recentMedia = recentMedia,
                             onLaunchMedia = { mediaItem -> launcherViewModel.launchMediaItem(context, mediaItem) },
@@ -276,16 +283,18 @@ fun NovaTvLauncherScreen(
                             onClearAllMedia = { launcherViewModel.clearRecentMedia() }
                         )
 
-                        // 3. Quick Access Dock (Pinned Shortcuts)
-                        TvQuickAccessDock(
-                            dockApps = dockApps,
-                            onLaunchApp = { app -> launcherViewModel.launchApp(context, app) },
-                            onOpenMenu = { app -> launcherViewModel.selectAppForActions(app) }
-                        )
+                        // 4. Panel de Accesos Directos Anclados (Only displayed if dockApps is NOT empty!)
+                        if (dockApps.isNotEmpty()) {
+                            TvQuickAccessDock(
+                                dockApps = dockApps,
+                                onLaunchApp = { app -> launcherViewModel.launchApp(context, app) },
+                                onOpenMenu = { app -> launcherViewModel.selectAppForActions(app) }
+                            )
+                        }
 
                         Spacer(modifier = Modifier.height(4.dp))
 
-                        // 3. Customizable Tabs Row
+                        // 5. Customizable Tabs Row
                         TvCategoryTabs(
                             categories = categories,
                             selectedTabId = uiState.selectedTabId,
@@ -293,31 +302,6 @@ fun NovaTvLauncherScreen(
                             onAddNewTabClick = { tabViewModel.openCreateTabDialog() },
                             onOpenTabManager = { tabViewModel.openTabManager() }
                         )
-
-                        // Optional Search Bar display when active
-                        if (uiState.searchQuery.isNotEmpty()) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 24.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                OutlinedTextField(
-                                    value = uiState.searchQuery,
-                                    onValueChange = { launcherViewModel.updateSearchQuery(it) },
-                                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = TvCyanAccent) },
-                                    trailingIcon = {
-                                        IconButton(onClick = { launcherViewModel.updateSearchQuery("") }) {
-                                            Icon(Icons.Default.Close, contentDescription = "Limpiar")
-                                        }
-                                    },
-                                    placeholder = { Text("Filtrando aplicaciones...", fontSize = 12.sp) },
-                                    modifier = Modifier.weight(1f),
-                                    singleLine = true
-                                )
-                            }
-                        }
 
                         Spacer(modifier = Modifier.height(4.dp))
                     }

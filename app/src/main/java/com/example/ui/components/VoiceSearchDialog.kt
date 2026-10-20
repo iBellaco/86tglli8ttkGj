@@ -149,7 +149,7 @@ fun VoiceSearchDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Control por Voz Inteligente",
+                        text = "Búsqueda por Voz de Aplicaciones",
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface

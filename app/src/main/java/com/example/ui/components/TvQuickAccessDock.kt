@@ -31,6 +31,9 @@ fun TvQuickAccessDock(
     onOpenMenu: (AppItem) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // By user requirement: if no apps are pinned to quick access, do not show the dock panel
+    if (dockApps.isEmpty()) return
+
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -53,42 +56,24 @@ fun TvQuickAccessDock(
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
             )
-            if (dockApps.isNotEmpty()) {
-                Text(
-                    text = "• ${dockApps.size} fijados",
-                    fontSize = 11.sp,
-                    color = TvCyanAccent
-                )
-            }
+            Text(
+                text = "• ${dockApps.size} fijados",
+                fontSize = 11.sp,
+                color = TvCyanAccent
+            )
         }
 
-        if (dockApps.isEmpty()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(
-                    text = "Mantén pulsado Menú u OK sobre cualquier aplicación para anclarla aquí como acceso directo prioritario.",
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            items(dockApps, key = { "dock_${it.packageName}" }) { app ->
+                TvAppCard(
+                    app = app,
+                    onLaunch = onLaunchApp,
+                    onOpenMenu = onOpenMenu,
+                    isDockItem = true
                 )
-            }
-        } else {
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                items(dockApps, key = { "dock_${it.packageName}" }) { app ->
-                    TvAppCard(
-                        app = app,
-                        onLaunch = onLaunchApp,
-                        onOpenMenu = onOpenMenu,
-                        isDockItem = true
-                    )
-                }
             }
         }
     }

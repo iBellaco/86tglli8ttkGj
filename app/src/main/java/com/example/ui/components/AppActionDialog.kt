@@ -47,6 +47,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import android.content.Context
+import android.content.pm.ApplicationInfo
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
@@ -62,6 +65,39 @@ import com.example.data.model.CategoryTab
 import com.example.ui.theme.TvCyanAccent
 import com.example.ui.theme.TvFocusBorder
 
+/**
+ * Checks whether an app is installed by default (system package, launcher package,
+ * or preconfigured default TV suite). Default apps cannot be uninstalled.
+ */
+fun isAppInstalledByDefault(context: Context, packageName: String): Boolean {
+    if (packageName == context.packageName) return true
+
+    val defaultSuitePackages = setOf(
+        "com.google.android.youtube.tv",
+        "com.netflix.ninja",
+        "com.amazon.amazonvideo.livingroom",
+        "com.disney.disneyplus",
+        "com.spotify.tv.android",
+        "com.plexapp.android",
+        "tv.twitch.android.app",
+        "org.xbmc.kodi",
+        "org.videolan.vlc",
+        "com.retroarch",
+        "com.android.vending",
+        "com.android.settings",
+        "com.google.android.tv.settings",
+        "com.google.android.katniss"
+    )
+    if (defaultSuitePackages.contains(packageName)) return true
+
+    return try {
+        val appInfo = context.packageManager.getApplicationInfo(packageName, 0)
+        (appInfo.flags and (ApplicationInfo.FLAG_SYSTEM or ApplicationInfo.FLAG_UPDATED_SYSTEM_APP)) != 0
+    } catch (e: Exception) {
+        defaultSuitePackages.contains(packageName)
+    }
+}
+
 @Composable
 fun AppActionDialog(
     app: AppItem,
@@ -74,6 +110,10 @@ fun AppActionDialog(
     onChangeCategory: (String) -> Unit,
     onUninstall: () -> Unit
 ) {
+    val context = LocalContext.current
+    val isDefaultApp = remember(app.packageName) {
+        isAppInstalledByDefault(context, app.packageName)
+    }
     var showCategorySelector by remember { mutableStateOf(false) }
 
     Dialog(
@@ -198,15 +238,17 @@ fun AppActionDialog(
                             testTag = "action_category"
                         )
 
-                        // 6. Desinstalar Aplicación
-                        ActionMenuItem(
-                            icon = Icons.Default.Delete,
-                            title = "Desinstalar Aplicación",
-                            subtitle = "Eliminar o desinstalar esta app del dispositivo",
-                            onClick = onUninstall,
-                            testTag = "action_uninstall",
-                            danger = true
-                        )
+                        // 6. Desinstalar Aplicación (Solo disponible para aplicaciones no instaladas por defecto)
+                        if (!isDefaultApp) {
+                            ActionMenuItem(
+                                icon = Icons.Default.Delete,
+                                title = "Desinstalar Aplicación",
+                                subtitle = "Eliminar o desinstalar esta app del dispositivo",
+                                onClick = onUninstall,
+                                testTag = "action_uninstall",
+                                danger = true
+                            )
+                        }
                     }
                 } else {
                     // Category Selection view

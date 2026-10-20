@@ -68,7 +68,7 @@ fun TvTopBar(
     isHiddenUnlocked: Boolean,
     weather: WeatherState = WeatherState(),
     onWeatherClick: () -> Unit = {},
-    onVoiceSearchClick: () -> Unit,
+    onVoiceSearchClick: () -> Unit = {},
     onToggleNightMode: () -> Unit,
     onToggleHiddenClick: () -> Unit,
     onCloudSyncClick: () -> Unit,
@@ -173,6 +173,30 @@ fun TvTopBar(
                                 fontWeight = FontWeight.SemiBold,
                                 color = TvCyanAccent
                             )
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color(0xFF0284C7).copy(alpha = 0.22f),
+                                border = androidx.compose.foundation.BorderStroke(0.5.dp, Color(0xFF38BDF8).copy(alpha = 0.5f))
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.WaterDrop,
+                                        contentDescription = "Probabilidad de lluvia",
+                                        tint = Color(0xFF38BDF8),
+                                        modifier = Modifier.size(11.dp)
+                                    )
+                                    Text(
+                                        text = "${weather.rainProbabilityPercent}% lluvia",
+                                        fontSize = 10.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF38BDF8)
+                                    )
+                                }
+                            }
                         }
                         Text(
                             text = "Hoy: Mín ${weather.todayMin}° • Máx ${weather.todayMax}°",
@@ -297,7 +321,7 @@ fun TvTopBar(
             }
         }
 
-        // Right side: Quick Action Buttons (Simplified, removing redundant icons next to settings)
+        // Right side: Quick Action Buttons (Energy Profile + Configuration / Ranura Cog)
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -311,20 +335,12 @@ fun TvTopBar(
                 testTag = "energy_profile_button"
             )
 
-            // Voice Search Button (DPad Focusable)
-            TvHeaderIconButton(
-                icon = Icons.Default.Mic,
-                contentDesc = "Búsqueda por Voz",
-                onClick = onVoiceSearchClick,
-                highlight = true,
-                testTag = "voice_search_top_button"
-            )
-
-            // Settings Button (Ranura / Cog)
+            // Settings Button (Icono de la Ranura / Configuración)
             TvHeaderIconButton(
                 icon = Icons.Default.Settings,
-                contentDesc = "Ajustes de Nova TV",
+                contentDesc = "Configuración",
                 onClick = onSettingsClick,
+                highlight = true,
                 testTag = "settings_top_button"
             )
         }
