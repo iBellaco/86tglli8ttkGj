@@ -55,6 +55,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.data.local.LauncherDatabase
 import com.example.data.repository.LauncherRepository
 import com.example.ui.components.AppActionDialog
+import com.example.ui.components.AppGrid
 import com.example.ui.components.HiddenAppsDialog
 import com.example.ui.components.NewTabDialog
 import com.example.ui.components.SettingsDialog
@@ -271,50 +272,15 @@ fun NovaTvLauncherScreen(
                     onDismiss = { launcherViewModel.selectTab("streaming") }
                 )
             } else {
-                if (displayedApps.isEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Text(
-                                text = if (uiState.selectedTabId == "hidden") "No hay aplicaciones ocultas" else "No se encontraron aplicaciones en esta categoría",
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = "Pulsa 'Gestionar Pestañas' o mantén pulsado Menú sobre una app para asignarla aquí",
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                } else {
-                    LazyVerticalGrid(
-                        columns = GridCells.Adaptive(minSize = 135.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                            .padding(horizontal = 24.dp),
-                        contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        items(displayedApps, key = { it.packageName }) { app ->
-                            TvAppCard(
-                                app = app,
-                                onLaunch = { selected -> launcherViewModel.launchApp(context, selected) },
-                                onOpenMenu = { selected -> launcherViewModel.selectAppForActions(selected) }
-                            )
-                        }
-                    }
-                }
+                AppGrid(
+                    apps = displayedApps,
+                    onLaunchApp = { selected -> launcherViewModel.launchApp(context, selected) },
+                    onOpenMenu = { selected -> launcherViewModel.selectAppForActions(selected) },
+                    columnsCount = 5,
+                    emptyMessage = if (uiState.selectedTabId == "hidden") "No hay aplicaciones ocultas" else "No se encontraron aplicaciones en esta categoría",
+                    emptySubMessage = "Pulsa 'Gestionar Pestañas' o mantén pulsado Menú sobre una app para asignarla aquí",
+                    modifier = Modifier.weight(1f)
+                )
             }
         }
 

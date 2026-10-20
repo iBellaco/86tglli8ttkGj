@@ -45,6 +45,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -72,10 +73,15 @@ fun TvAppCard(
     onLaunch: (AppItem) -> Unit,
     onOpenMenu: (AppItem) -> Unit,
     modifier: Modifier = Modifier,
-    isDockItem: Boolean = false
+    isDockItem: Boolean = false,
+    onFocusChanged: ((Boolean) -> Unit)? = null
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
+
+    LaunchedEffect(isFocused) {
+        onFocusChanged?.invoke(isFocused)
+    }
 
     val scale by animateFloatAsState(
         targetValue = if (isFocused) 1.12f else 1f,
