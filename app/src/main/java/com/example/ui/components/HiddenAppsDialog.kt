@@ -210,6 +210,8 @@ fun HiddenAppsDialog(
                                                             } else {
                                                                 enteredPin = next
                                                             }
+                                                        } else {
+                                                            enteredPin = digit
                                                         }
                                                     }
                                                 }

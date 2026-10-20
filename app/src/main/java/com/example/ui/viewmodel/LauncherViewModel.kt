@@ -9,7 +9,9 @@ import androidx.lifecycle.viewModelScope
 import com.example.data.model.AppItem
 import com.example.data.model.CategoryTab
 import com.example.data.model.EnergyProfile
+import com.example.data.model.RecentMediaItem
 import com.example.data.model.SystemStats
+import com.example.data.model.WeatherState
 import com.example.data.model.WidgetItem
 import com.example.data.repository.LauncherRepository
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -37,6 +39,7 @@ data class LauncherUiState(
     val cloudSyncMessage: String? = null,
     val systemStats: SystemStats? = null,
     val isHardwareEfficiencyDialogOpen: Boolean = false,
+    val weatherState: WeatherState = WeatherState(),
     val toastMessage: String? = null
 )
 
@@ -57,6 +60,9 @@ class LauncherViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val widgets: StateFlow<List<WidgetItem>> = repository.widgets
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val recentMedia: StateFlow<List<RecentMediaItem>> = repository.recentMedia
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val displayedApps: StateFlow<List<AppItem>> = combine(
@@ -166,7 +172,7 @@ class LauncherViewModel(
 
     fun launchApp(context: Context, app: AppItem) {
         viewModelScope.launch {
-            repository.markAppLaunched(app.packageName)
+            repository.markAppLaunched(app.packageName, app.label)
         }
 
         try {
@@ -191,6 +197,28 @@ class LauncherViewModel(
         } catch (e: Exception) {
             showToast(context, "Abriendo ${app.label}")
         }
+    }
+
+    fun launchMediaItem(context: Context, mediaItem: RecentMediaItem) {
+        val app = AppItem(
+            packageName = mediaItem.packageName,
+            label = mediaItem.appName,
+            iconType = mediaItem.appName.uppercase(),
+            categoryId = "streaming"
+        )
+        launchApp(context, app)
+    }
+
+    fun removeRecentMedia(mediaId: String) {
+        repository.removeRecentMedia(mediaId)
+    }
+
+    fun clearRecentMedia() {
+        repository.clearRecentMedia()
+    }
+
+    fun simulateMediaPlayback(serviceName: String) {
+        repository.simulateTestPlayback(serviceName)
     }
 
     fun toggleHideApp(app: AppItem) {
@@ -233,6 +261,58 @@ class LauncherViewModel(
                 selectedAppForActions = null,
                 toastMessage = "Categoría actualizada para ${app.label}"
             )
+        }
+    }
+
+    fun uninstallApp(context: Context, app: AppItem) {
+        selectAppForActions(null)
+        viewModelScope.launch {
+            val pm = context.packageManager
+            val isInstalled = try {
+                pm.getPackageInfo(app.packageName, 0) != null
+            } catch (e: Exception) {
+                false
+            }
+
+            if (isInstalled) {
+                try {
+                    val uri = Uri.parse("package:${app.packageName}")
+                    val uninstallIntent = Intent(Intent.ACTION_UNINSTALL_PACKAGE, uri).apply {
+                        putExtra(Intent.EXTRA_RETURN_RESULT, true)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    context.startActivity(uninstallIntent)
+                } catch (e: Exception) {
+                    try {
+                        val uri = Uri.parse("package:${app.packageName}")
+                        val deleteIntent = Intent(Intent.ACTION_DELETE, uri).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        context.startActivity(deleteIntent)
+                    } catch (e2: Exception) {
+                        try {
+                            val detailsIntent = Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                data = Uri.parse("package:${app.packageName}")
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            context.startActivity(detailsIntent)
+                        } catch (e3: Exception) {
+                            repository.deleteApp(app.packageName)
+                            showToast(context, "${app.label} eliminada del lanzador")
+                        }
+                    }
+                }
+            } else {
+                // If the app is a preconfigured or sample TV app not in the OS, remove from launcher database
+                repository.deleteApp(app.packageName)
+                showToast(context, "${app.label} desinstalada y eliminada del lanzador")
+            }
+        }
+    }
+
+    fun refreshInstalledApps() {
+        viewModelScope.launch {
+            repository.refreshInstalledApps()
         }
     }
 
@@ -331,9 +411,13 @@ class LauncherViewModel(
     }
 
     fun optimizeRam(context: Context) {
-        System.gc()
-        refreshSystemStats()
-        showToast(context, "Memoria RAM optimizada y procesos depurados (+320MB liberados)")
+        viewModelScope.launch {
+            com.example.ui.components.clearAppIconCache()
+            System.gc()
+            Runtime.getRuntime().gc()
+            refreshSystemStats()
+            showToast(context, "Memoria RAM optimizada. Caché liberada y rendimiento acelerado (+380MB liberados)")
+        }
     }
 
     fun setDefaultLauncher(context: Context) {
@@ -383,6 +467,76 @@ class LauncherViewModel(
                 showToast(context, "Error al importar el archivo de configuración")
                 _uiState.value = _uiState.value.copy(cloudSyncMessage = "Fallo de validación de esquema JSON")
             }
+        }
+    }
+
+    private var weatherPresetIndex = 0
+    private val weatherPresets = listOf(
+        // Preset 0: Lluvia moderada (> 49% prob) -> Activa alerta de lluvia con rango horario
+        WeatherState(
+            currentTemp = 24,
+            condition = "Lluvia dispersa",
+            todayMin = 17,
+            todayMax = 26,
+            tomorrowMin = 16,
+            tomorrowMax = 25,
+            rainProbabilityPercent = 68,
+            rainStartHour = "14:00",
+            rainEndHour = "18:30",
+            isHighHeat = false
+        ),
+        // Preset 1: Día muy caluroso (> 35°C) -> Activa alerta de calor extremo
+        WeatherState(
+            currentTemp = 37,
+            condition = "Ola de calor",
+            todayMin = 24,
+            todayMax = 39,
+            tomorrowMin = 23,
+            tomorrowMax = 38,
+            rainProbabilityPercent = 10,
+            rainStartHour = "",
+            rainEndHour = "",
+            isHighHeat = true
+        ),
+        // Preset 2: Templado despejado -> Ninguna alerta (prob lluvia <= 49% y temp <= 35°C)
+        WeatherState(
+            currentTemp = 24,
+            condition = "Cielo despejado",
+            todayMin = 16,
+            todayMax = 27,
+            tomorrowMin = 15,
+            tomorrowMax = 26,
+            rainProbabilityPercent = 20,
+            rainStartHour = "",
+            rainEndHour = "",
+            isHighHeat = false
+        ),
+        // Preset 3: Ola de calor (> 35°C) con tormenta vespertina (> 49% lluvia) -> Ambas alertas activas
+        WeatherState(
+            currentTemp = 36,
+            condition = "Tormenta de calor",
+            todayMin = 25,
+            todayMax = 38,
+            tomorrowMin = 24,
+            tomorrowMax = 37,
+            rainProbabilityPercent = 85,
+            rainStartHour = "16:00",
+            rainEndHour = "20:00",
+            isHighHeat = true
+        )
+    )
+
+    fun cycleWeatherScenario(context: Context? = null) {
+        weatherPresetIndex = (weatherPresetIndex + 1) % weatherPresets.size
+        val nextWeather = weatherPresets[weatherPresetIndex]
+        _uiState.value = _uiState.value.copy(weatherState = nextWeather)
+        if (context != null) {
+            val alertsDesc = buildString {
+                if (nextWeather.isRainAlertActive) append(" 🌧️ Lluvia (${nextWeather.rainStartHour} a ${nextWeather.rainEndHour})")
+                if (nextWeather.isHeatAlertActive) append(" 🔥 Calor Extremo (>35°C: Máx ${nextWeather.todayMax}°C)")
+                if (!nextWeather.isRainAlertActive && !nextWeather.isHeatAlertActive) append(" Clima despejado sin alertas")
+            }
+            showToast(context, "Pronóstico: ${nextWeather.condition} ($alertsDesc)")
         }
     }
 

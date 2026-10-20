@@ -7,6 +7,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.focusable
@@ -111,7 +112,7 @@ fun TvAppCard(
 
     Column(
         modifier = modifier
-            .width(if (isDockItem) 110.dp else 135.dp)
+            .width(if (isDockItem) 78.dp else 88.dp)
             .scale(scale)
             .onKeyEvent { keyEvent ->
                 if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
@@ -131,24 +132,23 @@ fun TvAppCard(
             .testTag("app_card_${app.packageName.replace('.', '_')}"),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // App Tile Box
+        // Compact App Tile Box
         Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f)
+                .size(if (isDockItem) 60.dp else 70.dp)
                 .shadow(
-                    elevation = if (isFocused) 16.dp else 4.dp,
-                    shape = RoundedCornerShape(20.dp),
-                    spotColor = if (isFocused) TvCyanAccent else Color.Black
+                    elevation = if (isFocused) 10.dp else 0.dp,
+                    shape = RoundedCornerShape(16.dp),
+                    spotColor = if (isFocused) TvCyanAccent else Color.Transparent
                 )
-                .clip(RoundedCornerShape(20.dp))
+                .clip(RoundedCornerShape(16.dp))
                 .background(
-                    if (isFocused) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface
+                    if (isFocused) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
                 )
                 .border(
-                    width = if (isFocused) 3.dp else 1.dp,
-                    color = if (isFocused) borderColor else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
-                    shape = RoundedCornerShape(20.dp)
+                    width = if (isFocused) 2.5.dp else 0.dp,
+                    color = if (isFocused) borderColor else Color.Transparent,
+                    shape = RoundedCornerShape(16.dp)
                 ),
             contentAlignment = Alignment.Center
         ) {
@@ -158,14 +158,14 @@ fun TvAppCard(
                     bitmap = realAppBitmap,
                     contentDescription = app.label,
                     modifier = Modifier
-                        .size(if (isDockItem) 48.dp else 60.dp)
-                        .clip(RoundedCornerShape(14.dp))
+                        .size(if (isDockItem) 46.dp else 56.dp)
+                        .clip(RoundedCornerShape(12.dp))
                 )
             } else {
                 // Distinctive Icon Background Accent Circle (fallback)
                 Box(
                     modifier = Modifier
-                        .size(if (isDockItem) 54.dp else 68.dp)
+                        .size(if (isDockItem) 46.dp else 56.dp)
                         .clip(CircleShape)
                         .background(brandColor.copy(alpha = 0.18f)),
                     contentAlignment = Alignment.Center
@@ -174,7 +174,7 @@ fun TvAppCard(
                         imageVector = resolveAppIcon(app.iconType),
                         contentDescription = app.label,
                         tint = brandColor,
-                        modifier = Modifier.size(if (isDockItem) 32.dp else 40.dp)
+                        modifier = Modifier.size(if (isDockItem) 28.dp else 34.dp)
                     )
                 }
             }
@@ -184,13 +184,13 @@ fun TvAppCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.TopStart)
-                    .padding(8.dp),
+                    .padding(4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 if (app.isFavorite) {
                     Box(
                         modifier = Modifier
-                            .size(18.dp)
+                            .size(15.dp)
                             .clip(CircleShape)
                             .background(Color(0xFFFBBF24)),
                         contentAlignment = Alignment.Center
@@ -199,7 +199,7 @@ fun TvAppCard(
                             imageVector = Icons.Default.Star,
                             contentDescription = "Favorito",
                             tint = Color.Black,
-                            modifier = Modifier.size(12.dp)
+                            modifier = Modifier.size(10.dp)
                         )
                     }
                 } else {
@@ -209,16 +209,16 @@ fun TvAppCard(
                 if (app.isPinnedToDock) {
                     Box(
                         modifier = Modifier
-                            .size(18.dp)
+                            .size(15.dp)
                             .clip(CircleShape)
-                            .background(TvCyanAccent.copy(alpha = 0.8f)),
+                            .background(TvCyanAccent),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.PushPin,
-                            contentDescription = "Fijada en Dock",
+                            contentDescription = "Anclada",
                             tint = Color.Black,
-                            modifier = Modifier.size(11.dp)
+                            modifier = Modifier.size(10.dp)
                         )
                     }
                 }
@@ -229,7 +229,7 @@ fun TvAppCard(
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
-                        .padding(8.dp)
+                        .padding(4.dp)
                         .clip(CircleShape)
                         .background(Color(0xFFEF4444)),
                     contentAlignment = Alignment.Center
@@ -238,25 +238,66 @@ fun TvAppCard(
                         imageVector = Icons.Default.Lock,
                         contentDescription = "Oculta",
                         tint = Color.White,
-                        modifier = Modifier.padding(3.dp).size(12.dp)
+                        modifier = Modifier.padding(2.dp).size(9.dp)
                     )
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(4.dp))
 
-        // App Title
-        Text(
-            text = app.label,
-            fontSize = if (isDockItem) 12.sp else 13.sp,
-            fontWeight = if (isFocused) FontWeight.Bold else FontWeight.Medium,
-            color = if (isFocused) TvCyanAccent else MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)
+        // App Title with smooth animation and high-contrast theme-dependent styling
+        val textScale by animateFloatAsState(
+            targetValue = if (isFocused) 1.08f else 1.0f,
+            animationSpec = spring(dampingRatio = 0.8f, stiffness = 400f),
+            label = "appLabelScale"
         )
+        val textBgColor by animateColorAsState(
+            targetValue = if (isFocused) {
+                TvCyanAccent.copy(alpha = 0.18f)
+            } else {
+                Color.Transparent
+            },
+            label = "appLabelBg"
+        )
+        val textColor by animateColorAsState(
+            targetValue = if (isFocused) {
+                TvCyanAccent
+            } else {
+                MaterialTheme.colorScheme.onSurface
+            },
+            label = "appLabelColor"
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .scale(textScale)
+                .clip(RoundedCornerShape(6.dp))
+                .background(textBgColor)
+                .padding(horizontal = 3.dp, vertical = 2.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = app.label,
+                fontSize = if (isDockItem) 11.sp else 11.5.sp,
+                fontWeight = if (isFocused) FontWeight.ExtraBold else FontWeight.SemiBold,
+                color = textColor,
+                maxLines = 1,
+                overflow = if (isFocused) TextOverflow.Clip else TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .then(
+                        if (isFocused) {
+                            Modifier.basicMarquee(
+                                iterations = Int.MAX_VALUE,
+                                initialDelayMillis = 600,
+                                velocity = 40.dp
+                            )
+                        } else Modifier
+                    )
+            )
+        }
     }
 }
 
@@ -281,7 +322,15 @@ fun resolveAppIcon(iconType: String): ImageVector {
     }
 }
 
+private val iconCache = android.util.LruCache<String, androidx.compose.ui.graphics.ImageBitmap>(64)
+
+fun clearAppIconCache() {
+    iconCache.evictAll()
+}
+
 fun getAppIconBitmap(context: android.content.Context, packageName: String): androidx.compose.ui.graphics.ImageBitmap? {
+    iconCache.get(packageName)?.let { return it }
+
     return try {
         val pm = context.packageManager
         val drawable = try {
@@ -290,7 +339,7 @@ fun getAppIconBitmap(context: android.content.Context, packageName: String): and
             null
         } ?: pm.getApplicationIcon(packageName)
 
-        if (drawable is android.graphics.drawable.BitmapDrawable && drawable.bitmap != null && !drawable.bitmap.isRecycled) {
+        val imageBitmap = if (drawable is android.graphics.drawable.BitmapDrawable && drawable.bitmap != null && !drawable.bitmap.isRecycled) {
             drawable.bitmap.asImageBitmap()
         } else {
             val width = if (drawable.intrinsicWidth > 0) drawable.intrinsicWidth else 128
@@ -305,6 +354,8 @@ fun getAppIconBitmap(context: android.content.Context, packageName: String): and
             drawable.draw(canvas)
             bitmap.asImageBitmap()
         }
+
+        imageBitmap?.also { iconCache.put(packageName, it) }
     } catch (e: Exception) {
         null
     }

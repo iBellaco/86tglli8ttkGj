@@ -36,10 +36,14 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -65,6 +69,7 @@ import com.example.ui.components.TabEditDialog
 import com.example.ui.components.TvAppCard
 import com.example.ui.components.TvCategoryTabs
 import com.example.ui.components.TvQuickAccessDock
+import com.example.ui.components.TvRecentMediaBanner
 import com.example.ui.components.TvTabManagerDialog
 import com.example.ui.components.TvTopBar
 import com.example.ui.components.TvWidgetsRow
@@ -107,6 +112,20 @@ class MainActivity : ComponentActivity() {
                 tabUiState.toastMessage?.let {
                     Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
                     tabViewModel.clearToast()
+                }
+            }
+
+            // Auto-refresh apps and performance stats whenever launcher comes to the foreground (e.g. after uninstall)
+            val lifecycleOwner = LocalLifecycleOwner.current
+            DisposableEffect(lifecycleOwner) {
+                val observer = LifecycleEventObserver { _, event ->
+                    if (event == Lifecycle.Event.ON_RESUME) {
+                        launcherViewModel.refreshInstalledApps()
+                    }
+                }
+                lifecycleOwner.lifecycle.addObserver(observer)
+                onDispose {
+                    lifecycleOwner.lifecycle.removeObserver(observer)
                 }
             }
 
@@ -169,6 +188,7 @@ fun NovaTvLauncherScreen(
     val context = LocalContext.current
     val uiState by launcherViewModel.uiState.collectAsState()
     val tabUiState by tabViewModel.uiState.collectAsState()
+    val recentMedia by launcherViewModel.recentMedia.collectAsState()
 
     val backgroundBrush = remember(uiState.isNightModeActive) {
         if (uiState.isNightModeActive) {
@@ -196,68 +216,22 @@ fun NovaTvLauncherScreen(
             .background(backgroundBrush)
             .windowInsetsPadding(WindowInsets.safeDrawing)
     ) {
-        Column(
-            modifier = Modifier.fillMaxSize()
-        ) {
-            // 1. Top Bar (Clock, Weather, Energy Profile, Voice Search, Quick Action Buttons)
-            TvTopBar(
-                energyProfile = uiState.energyProfile,
-                isNightMode = uiState.isNightModeActive,
-                isHiddenUnlocked = uiState.isHiddenAppsUnlocked,
-                onVoiceSearchClick = { launcherViewModel.openVoiceSearch() },
-                onToggleNightMode = { launcherViewModel.toggleNightModeManual() },
-                onToggleHiddenClick = { launcherViewModel.selectTab("hidden") },
-                onCloudSyncClick = { launcherViewModel.openSettings() },
-                onSettingsClick = { launcherViewModel.openSettings() },
-                onEnergyProfileClick = { launcherViewModel.openHardwareEfficiencyDialog() }
-            )
-
-            // 2. Quick Access Dock (1-click pinned favorite apps)
-            TvQuickAccessDock(
-                dockApps = dockApps,
-                onLaunchApp = { app -> launcherViewModel.launchApp(context, app) },
-                onOpenMenu = { app -> launcherViewModel.selectAppForActions(app) }
-            )
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            // 4. Customizable Tabs Row with Tab Management trigger
-            TvCategoryTabs(
-                categories = categories,
-                selectedTabId = uiState.selectedTabId,
-                onTabSelected = { tabId -> launcherViewModel.selectTab(tabId) },
-                onAddNewTabClick = { tabViewModel.openCreateTabDialog() },
-                onOpenTabManager = { tabViewModel.openTabManager() }
-            )
-
-            // Optional Search Bar display when active
-            if (uiState.searchQuery.isNotEmpty()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedTextField(
-                        value = uiState.searchQuery,
-                        onValueChange = { launcherViewModel.updateSearchQuery(it) },
-                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = TvCyanAccent) },
-                        trailingIcon = {
-                            IconButton(onClick = { launcherViewModel.updateSearchQuery("") }) {
-                                Icon(Icons.Default.Close, contentDescription = "Limpiar")
-                            }
-                        },
-                        placeholder = { Text("Filtrando aplicaciones...", fontSize = 12.sp) },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true
-                    )
-                }
-            }
-
-            // 5. Main TV Apps Grid
-            if (uiState.selectedTabId == "hidden" && !uiState.isHiddenAppsUnlocked) {
-                // If user selected hidden tab while locked, prompt unlock dialog
+        // Main Unified Screen Layout (Everything scrolls smoothly together)
+        if (uiState.selectedTabId == "hidden" && !uiState.isHiddenAppsUnlocked) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                TvTopBar(
+                    energyProfile = uiState.energyProfile,
+                    isNightMode = uiState.isNightModeActive,
+                    isHiddenUnlocked = uiState.isHiddenAppsUnlocked,
+                    weather = uiState.weatherState,
+                    onWeatherClick = { launcherViewModel.cycleWeatherScenario(context) },
+                    onVoiceSearchClick = { launcherViewModel.openVoiceSearch() },
+                    onToggleNightMode = { launcherViewModel.toggleNightModeManual() },
+                    onToggleHiddenClick = { launcherViewModel.selectTab("hidden") },
+                    onCloudSyncClick = { launcherViewModel.openSettings() },
+                    onSettingsClick = { launcherViewModel.openSettings() },
+                    onEnergyProfileClick = { launcherViewModel.openHardwareEfficiencyDialog() }
+                )
                 HiddenAppsDialog(
                     hiddenApps = hiddenApps,
                     isUnlocked = false,
@@ -266,19 +240,90 @@ fun NovaTvLauncherScreen(
                     onLockAgain = { launcherViewModel.lockHiddenApps() },
                     onUnhideApp = { app -> launcherViewModel.toggleHideApp(app) },
                     onLaunchApp = { app -> launcherViewModel.launchApp(context, app) },
-                    onDismiss = { launcherViewModel.selectTab("streaming") }
-                )
-            } else {
-                AppGrid(
-                    apps = displayedApps,
-                    onLaunchApp = { selected -> launcherViewModel.launchApp(context, selected) },
-                    onOpenMenu = { selected -> launcherViewModel.selectAppForActions(selected) },
-                    columnsCount = 5,
-                    emptyMessage = if (uiState.selectedTabId == "hidden") "No hay aplicaciones ocultas" else "No se encontraron aplicaciones en esta categoría",
-                    emptySubMessage = "Pulsa 'Gestionar Pestañas' o mantén pulsado Menú sobre una app para asignarla aquí",
-                    modifier = Modifier.weight(1f)
+                    onDismiss = { launcherViewModel.selectTab("all") }
                 )
             }
+        } else {
+            AppGrid(
+                apps = displayedApps,
+                onLaunchApp = { selected -> launcherViewModel.launchApp(context, selected) },
+                onOpenMenu = { selected -> launcherViewModel.selectAppForActions(selected) },
+                columnsCount = 6,
+                emptyMessage = if (uiState.selectedTabId == "hidden") "No hay aplicaciones ocultas" else "No se encontraron aplicaciones en esta categoría",
+                emptySubMessage = "Pulsa 'Gestionar Pestañas' o mantén pulsado Menú sobre una app para asignarla aquí",
+                headerContent = {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        // 1. Top Bar (Clock 12h, Weather Large with Min/Max and Alerts, Energy Profile, Voice Search, Settings)
+                        TvTopBar(
+                            energyProfile = uiState.energyProfile,
+                            isNightMode = uiState.isNightModeActive,
+                            isHiddenUnlocked = uiState.isHiddenAppsUnlocked,
+                            weather = uiState.weatherState,
+                            onWeatherClick = { launcherViewModel.cycleWeatherScenario(context) },
+                            onVoiceSearchClick = { launcherViewModel.openVoiceSearch() },
+                            onToggleNightMode = { launcherViewModel.toggleNightModeManual() },
+                            onToggleHiddenClick = { launcherViewModel.selectTab("hidden") },
+                            onCloudSyncClick = { launcherViewModel.openSettings() },
+                            onSettingsClick = { launcherViewModel.openSettings() },
+                            onEnergyProfileClick = { launcherViewModel.openHardwareEfficiencyDialog() }
+                        )
+
+                        // 2. Continuar Viendo / Último Video (Only rendered when watch history is NOT empty!)
+                        TvRecentMediaBanner(
+                            recentMedia = recentMedia,
+                            onLaunchMedia = { mediaItem -> launcherViewModel.launchMediaItem(context, mediaItem) },
+                            onRemoveMedia = { id -> launcherViewModel.removeRecentMedia(id) },
+                            onClearAllMedia = { launcherViewModel.clearRecentMedia() }
+                        )
+
+                        // 3. Quick Access Dock (Pinned Shortcuts)
+                        TvQuickAccessDock(
+                            dockApps = dockApps,
+                            onLaunchApp = { app -> launcherViewModel.launchApp(context, app) },
+                            onOpenMenu = { app -> launcherViewModel.selectAppForActions(app) }
+                        )
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        // 3. Customizable Tabs Row
+                        TvCategoryTabs(
+                            categories = categories,
+                            selectedTabId = uiState.selectedTabId,
+                            onTabSelected = { tabId -> launcherViewModel.selectTab(tabId) },
+                            onAddNewTabClick = { tabViewModel.openCreateTabDialog() },
+                            onOpenTabManager = { tabViewModel.openTabManager() }
+                        )
+
+                        // Optional Search Bar display when active
+                        if (uiState.searchQuery.isNotEmpty()) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 24.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedTextField(
+                                    value = uiState.searchQuery,
+                                    onValueChange = { launcherViewModel.updateSearchQuery(it) },
+                                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = TvCyanAccent) },
+                                    trailingIcon = {
+                                        IconButton(onClick = { launcherViewModel.updateSearchQuery("") }) {
+                                            Icon(Icons.Default.Close, contentDescription = "Limpiar")
+                                        }
+                                    },
+                                    placeholder = { Text("Filtrando aplicaciones...", fontSize = 12.sp) },
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(4.dp))
+                    }
+                },
+                modifier = Modifier.fillMaxSize()
+            )
         }
 
         // Dialogs Overlay
@@ -304,7 +349,8 @@ fun NovaTvLauncherScreen(
                 onToggleHide = { launcherViewModel.toggleHideApp(app) },
                 onTogglePinDock = { launcherViewModel.togglePinDock(app) },
                 onToggleFavorite = { launcherViewModel.toggleFavorite(app) },
-                onChangeCategory = { catId -> launcherViewModel.changeAppCategory(app, catId) }
+                onChangeCategory = { catId -> launcherViewModel.changeAppCategory(app, catId) },
+                onUninstall = { launcherViewModel.uninstallApp(context, app) }
             )
         }
 
@@ -327,11 +373,15 @@ fun NovaTvLauncherScreen(
                 isNightModeActive = uiState.isNightModeActive,
                 cloudSyncMessage = uiState.cloudSyncMessage,
                 systemStats = uiState.systemStats,
+                weather = uiState.weatherState,
+                onCycleWeather = { launcherViewModel.cycleWeatherScenario(context) },
                 onSetEnergyProfile = { launcherViewModel.setEnergyProfile(it) },
                 onToggleAutoNightMode = { launcherViewModel.toggleAutoNightMode() },
                 onToggleNightModeManual = { launcherViewModel.toggleNightModeManual() },
                 onOptimizeRam = { launcherViewModel.optimizeRam(context) },
                 onSetDefaultLauncher = { launcherViewModel.setDefaultLauncher(context) },
+                onSimulateMedia = { service -> launcherViewModel.simulateMediaPlayback(service) },
+                onClearMedia = { launcherViewModel.clearRecentMedia() },
                 onExportBackup = { callback -> launcherViewModel.exportBackup(callback) },
                 onImportBackup = { json -> launcherViewModel.importBackup(json, context) },
                 onDismiss = { launcherViewModel.closeSettings() }

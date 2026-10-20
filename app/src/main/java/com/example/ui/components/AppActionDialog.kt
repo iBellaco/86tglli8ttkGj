@@ -14,15 +14,22 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Star
@@ -49,6 +56,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.example.data.model.AppItem
 import com.example.data.model.CategoryTab
 import com.example.ui.theme.TvCyanAccent
@@ -63,40 +71,66 @@ fun AppActionDialog(
     onToggleHide: () -> Unit,
     onTogglePinDock: () -> Unit,
     onToggleFavorite: () -> Unit,
-    onChangeCategory: (String) -> Unit
+    onChangeCategory: (String) -> Unit,
+    onUninstall: () -> Unit
 ) {
     var showCategorySelector by remember { mutableStateOf(false) }
 
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
         Surface(
             modifier = Modifier
-                .width(440.dp)
+                .widthIn(max = 480.dp)
+                .fillMaxWidth(0.92f)
+                .heightIn(max = 540.dp)
                 .clip(RoundedCornerShape(24.dp))
                 .border(2.dp, TvFocusBorder, RoundedCornerShape(24.dp)),
             color = MaterialTheme.colorScheme.surface
         ) {
             Column(
-                modifier = Modifier.padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                modifier = Modifier
+                    .padding(20.dp)
             ) {
-                // Header
+                // Header (Fixed)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
-                        Text(
-                            text = app.label,
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = app.packageName,
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = app.label.take(1).uppercase(),
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 18.sp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+
+                        Column {
+                            Text(
+                                text = app.label,
+                                fontSize = 17.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = app.packageName,
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
 
                     TvHeaderIconButton(
@@ -106,11 +140,19 @@ fun AppActionDialog(
                     )
                 }
 
+                Spacer(modifier = Modifier.height(10.dp))
                 Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 if (!showCategorySelector) {
-                    // Action List
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Scrollable Action List - Ensures "Ocultar Aplicación" is 100% reachable on any screen
+                    Column(
+                        modifier = Modifier
+                            .weight(1f, fill = false)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // 1. Abrir
                         ActionMenuItem(
                             icon = Icons.Default.PlayArrow,
                             title = "Abrir Aplicación",
@@ -119,14 +161,26 @@ fun AppActionDialog(
                             testTag = "action_open"
                         )
 
+                        // 2. Anclar Acceso Directo
                         ActionMenuItem(
                             icon = Icons.Default.PushPin,
-                            title = if (app.isPinnedToDock) "Desfijar de Acceso Rápido" else "Fijar en Acceso Rápido",
-                            subtitle = "Fijar icono en la barra principal del Home",
+                            title = if (app.isPinnedToDock) "Desanclar Acceso Directo" else "Anclar como Acceso Directo",
+                            subtitle = if (app.isPinnedToDock) "Quitar de la fila de accesos directos anclados" else "Fijar en la barra superior de accesos directos",
                             onClick = onTogglePinDock,
                             testTag = "action_dock"
                         )
 
+                        // 3. Ocultar Aplicación (Highlighted with Vault Icon)
+                        ActionMenuItem(
+                            icon = if (app.isHidden) Icons.Default.LockOpen else Icons.Default.Lock,
+                            title = if (app.isHidden) "Mostrar Aplicación en el Inicio" else "Ocultar Aplicación (Bóveda)",
+                            subtitle = if (app.isHidden) "Regresar a la cuadrícula visible del inicio" else "Mover a la bóveda privada protegida por PIN",
+                            onClick = onToggleHide,
+                            testTag = "action_hide",
+                            danger = !app.isHidden
+                        )
+
+                        // 4. Favoritos
                         ActionMenuItem(
                             icon = Icons.Default.Star,
                             title = if (app.isFavorite) "Quitar de Favoritos" else "Marcar como Favorito",
@@ -135,15 +189,7 @@ fun AppActionDialog(
                             testTag = "action_favorite"
                         )
 
-                        ActionMenuItem(
-                            icon = if (app.isHidden) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                            title = if (app.isHidden) "Mostrar Aplicación en el Inicio" else "Ocultar Aplicación",
-                            subtitle = if (app.isHidden) "Regresar app a las pestañas visibles" else "¿Deseas ocultar esta app? Se moverá a la bóveda protegida por PIN",
-                            onClick = onToggleHide,
-                            testTag = "action_hide",
-                            danger = !app.isHidden
-                        )
-
+                        // 5. Mover a otra pestaña
                         ActionMenuItem(
                             icon = Icons.Default.Category,
                             title = "Mover a otra Pestaña",
@@ -151,17 +197,30 @@ fun AppActionDialog(
                             onClick = { showCategorySelector = true },
                             testTag = "action_category"
                         )
+
+                        // 6. Desinstalar Aplicación
+                        ActionMenuItem(
+                            icon = Icons.Default.Delete,
+                            title = "Desinstalar Aplicación",
+                            subtitle = "Eliminar o desinstalar esta app del dispositivo",
+                            onClick = onUninstall,
+                            testTag = "action_uninstall",
+                            danger = true
+                        )
                     }
                 } else {
                     // Category Selection view
                     Text(
-                        text = "Seleccionar Pestaña:",
-                        fontSize = 14.sp,
+                        text = "Seleccionar Pestaña de Destino:",
+                        fontSize = 13.5.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.primary
                     )
+                    Spacer(modifier = Modifier.height(8.dp))
                     LazyColumn(
-                        modifier = Modifier.height(200.dp),
+                        modifier = Modifier
+                            .heightIn(max = 240.dp)
+                            .weight(1f, fill = false),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         items(categories) { cat ->
@@ -213,7 +272,7 @@ fun ActionMenuItem(
             )
             .clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
             .focusable(interactionSource = interactionSource)
-            .padding(horizontal = 14.dp, vertical = 10.dp)
+            .padding(horizontal = 14.dp, vertical = 9.dp)
             .testTag(testTag),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)

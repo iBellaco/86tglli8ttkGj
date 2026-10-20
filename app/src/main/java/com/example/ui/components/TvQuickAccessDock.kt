@@ -31,8 +31,6 @@ fun TvQuickAccessDock(
     onOpenMenu: (AppItem) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    if (dockApps.isEmpty()) return
-
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -41,38 +39,56 @@ fun TvQuickAccessDock(
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
-            modifier = Modifier.padding(bottom = 8.dp)
+            modifier = Modifier.padding(bottom = 6.dp)
         ) {
             Icon(
-                imageVector = Icons.Default.ElectricBolt,
-                contentDescription = "Acceso Rápido",
-                tint = Color(0xFFFBBF24),
-                modifier = Modifier.size(16.dp)
+                imageVector = Icons.Default.PushPin,
+                contentDescription = "Accesos Directos Anclados",
+                tint = TvCyanAccent,
+                modifier = Modifier.size(15.dp)
             )
             Text(
-                text = "Acceso Rápido",
-                fontSize = 13.sp,
+                text = "Accesos Directos Anclados",
+                fontSize = 12.5.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
             )
-            Text(
-                text = "• Canales Principales",
-                fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            if (dockApps.isNotEmpty()) {
+                Text(
+                    text = "• ${dockApps.size} fijados",
+                    fontSize = 11.sp,
+                    color = TvCyanAccent
+                )
+            }
         }
 
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            items(dockApps, key = { "dock_${it.packageName}" }) { app ->
-                TvAppCard(
-                    app = app,
-                    onLaunch = onLaunchApp,
-                    onOpenMenu = onOpenMenu,
-                    isDockItem = true
+        if (dockApps.isEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "Mantén pulsado Menú u OK sobre cualquier aplicación para anclarla aquí como acceso directo prioritario.",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                 )
+            }
+        } else {
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                items(dockApps, key = { "dock_${it.packageName}" }) { app ->
+                    TvAppCard(
+                        app = app,
+                        onLaunch = onLaunchApp,
+                        onOpenMenu = onOpenMenu,
+                        isDockItem = true
+                    )
+                }
             }
         }
     }

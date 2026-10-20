@@ -26,13 +26,16 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Thermostat
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import com.example.data.model.WeatherState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -63,6 +66,8 @@ fun TvTopBar(
     energyProfile: EnergyProfile,
     isNightMode: Boolean,
     isHiddenUnlocked: Boolean,
+    weather: WeatherState = WeatherState(),
+    onWeatherClick: () -> Unit = {},
     onVoiceSearchClick: () -> Unit,
     onToggleNightMode: () -> Unit,
     onToggleHiddenClick: () -> Unit,
@@ -75,12 +80,13 @@ fun TvTopBar(
     var currentDateString by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
-        val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
-        val dateFormat = SimpleDateFormat("EEE, d MMM", Locale.getDefault())
+        val timeFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
+        val dateFormat = SimpleDateFormat("EEEE, d 'de' MMMM 'de' yyyy", Locale("es", "ES"))
         while (true) {
             val now = Date()
             currentTimeString = timeFormat.format(now)
-            currentDateString = dateFormat.format(now)
+            val fullDate = dateFormat.format(now)
+            currentDateString = fullDate.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale("es", "ES")) else it.toString() }
             delay(1000)
         }
     }
@@ -88,25 +94,25 @@ fun TvTopBar(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 24.dp, vertical = 12.dp),
+            .padding(horizontal = 24.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Left side: Brand Logo + Clock & Date
+        // Left side: Brand Logo + Clock & Date + Large Weather Widget + Conditional Alerts
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             Surface(
                 shape = RoundedCornerShape(12.dp),
                 color = MaterialTheme.colorScheme.primaryContainer,
-                modifier = Modifier.size(44.dp)
+                modifier = Modifier.size(46.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Text(
                         text = "TV",
                         fontWeight = FontWeight.ExtraBold,
-                        fontSize = 16.sp,
+                        fontSize = 17.sp,
                         color = MaterialTheme.colorScheme.primary
                     )
                 }
@@ -114,45 +120,184 @@ fun TvTopBar(
 
             Column {
                 Text(
-                    text = currentTimeString.ifEmpty { "20:00" },
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
+                    text = currentTimeString.ifEmpty { "8:30 PM" },
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.ExtraBold,
                     color = MaterialTheme.colorScheme.onBackground
                 )
                 Text(
-                    text = currentDateString.ifEmpty { "Lunes, 19 Oct" },
+                    text = currentDateString.ifEmpty { "Lunes, 20 de octubre de 2026" },
                     fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(4.dp))
 
-            // Weather Pill
-            Row(
+            // Large, highly readable Weather Card: Temp Actual, Hoy Mín/Máx, Mañana Mín/Máx
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)),
                 modifier = Modifier
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .clickable { onWeatherClick() }
+                    .testTag("weather_card")
             ) {
-                Icon(
-                    imageVector = Icons.Default.WbSunny,
-                    contentDescription = "Clima",
-                    tint = Color(0xFFFBBF24),
-                    modifier = Modifier.size(16.dp)
-                )
-                Text(
-                    text = "23°C Despejado",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Icon(
+                        imageVector = if (weather.isRainAlertActive) Icons.Default.WaterDrop else Icons.Default.WbSunny,
+                        contentDescription = "Clima",
+                        tint = if (weather.isRainAlertActive) Color(0xFF38BDF8) else Color(0xFFFBBF24),
+                        modifier = Modifier.size(32.dp)
+                    )
+                    Column {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = "${weather.currentTemp}°C",
+                                fontSize = 19.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = weather.condition,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = TvCyanAccent
+                            )
+                        }
+                        Text(
+                            text = "Hoy: Mín ${weather.todayMin}° • Máx ${weather.todayMax}°",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = "Mañana: Mín ${weather.tomorrowMin}° • Máx ${weather.tomorrowMax}°",
+                            fontSize = 10.5.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f)
+                        )
+                    }
+                }
+            }
+
+            // ALERTA DE LLUVIA: SOLAMENTE SI LA PROBABILIDAD DE LLUVIA ES MAYOR AL 49%
+            if (weather.isRainAlertActive) {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = Color(0xFF0284C7).copy(alpha = 0.18f),
+                    border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFF38BDF8)),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(14.dp))
+                        .clickable { onWeatherClick() }
+                        .testTag("weather_rain_alert")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = Color(0xFF0284C7),
+                            modifier = Modifier.size(26.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.WaterDrop,
+                                    contentDescription = "Alerta de Lluvia",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                            }
+                        }
+                        Column {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    text = "Alerta Lluvia",
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF38BDF8)
+                                )
+                                Text(
+                                    text = "(${weather.rainProbabilityPercent}%)",
+                                    fontSize = 10.5.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = Color(0xFFE0F2FE)
+                                )
+                            }
+                            Text(
+                                text = "Aprox: ${weather.rainStartHour} a ${weather.rainEndHour}",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.9f)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // ALERTA DE TEMPERATURA MUY ALTA
+            if (weather.isHeatAlertActive) {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = Color(0xFFEF4444).copy(alpha = 0.18f),
+                    border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFFF87171)),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(14.dp))
+                        .clickable { onWeatherClick() }
+                        .testTag("weather_heat_alert")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = Color(0xFFEF4444),
+                            modifier = Modifier.size(26.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.Thermostat,
+                                    contentDescription = "Alerta Calor Extremo",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                            }
+                        }
+                        Column {
+                            Text(
+                                text = "Alerta Calor (>35°C)",
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFF87171)
+                            )
+                            Text(
+                                text = "${weather.currentTemp}°C actual • Máx ${weather.todayMax}°C",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.9f)
+                            )
+                        }
+                    }
+                }
             }
         }
 
-        // Right side: Energy Badge + Remote Friendly Quick Action Buttons
+        // Right side: Quick Action Buttons (Simplified, removing redundant icons next to settings)
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -175,23 +320,7 @@ fun TvTopBar(
                 testTag = "voice_search_top_button"
             )
 
-            // Night Mode Toggle Button
-            TvHeaderIconButton(
-                icon = if (isNightMode) Icons.Default.DarkMode else Icons.Default.LightMode,
-                contentDesc = "Modo Oscuro Automático",
-                onClick = onToggleNightMode,
-                testTag = "night_mode_top_button"
-            )
-
-            // Hidden Apps Button
-            TvHeaderIconButton(
-                icon = if (isHiddenUnlocked) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                contentDesc = "Apps Ocultas",
-                onClick = onToggleHiddenClick,
-                testTag = "hidden_apps_top_button"
-            )
-
-            // Settings Button
+            // Settings Button (Ranura / Cog)
             TvHeaderIconButton(
                 icon = Icons.Default.Settings,
                 contentDesc = "Ajustes de Nova TV",

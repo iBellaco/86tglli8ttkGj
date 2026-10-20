@@ -13,10 +13,12 @@ import com.example.data.model.AppItem
 import com.example.data.model.CategoryTab
 import com.example.data.model.CloudBackupPayload
 import com.example.data.model.EnergyProfile
+import com.example.data.model.RecentMediaItem
 import com.example.data.model.SystemStats
 import com.example.data.model.WidgetItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -33,6 +35,10 @@ class LauncherRepository(
     val favoriteApps: Flow<List<AppItem>> = dao.getFavoriteApps()
     val categories: Flow<List<CategoryTab>> = dao.getAllCategories()
     val widgets: Flow<List<WidgetItem>> = dao.getAllWidgets()
+
+    private val mediaPrefs = context.getSharedPreferences("nova_recent_media_prefs", Context.MODE_PRIVATE)
+    private val _recentMedia = MutableStateFlow<List<RecentMediaItem>>(loadRecentMediaFromPrefs())
+    val recentMedia: Flow<List<RecentMediaItem>> = _recentMedia
 
     suspend fun initializeDefaultsIfNeeded() = withContext(Dispatchers.IO) {
         val existingCategories = dao.getAllCategories().first()
@@ -435,8 +441,40 @@ class LauncherRepository(
         }
     }
 
-    suspend fun markAppLaunched(packageName: String) {
+    suspend fun markAppLaunched(packageName: String, appLabel: String = "") {
         dao.incrementLaunch(packageName, System.currentTimeMillis())
+        recordMediaPlayback(packageName, appLabel)
+    }
+
+    suspend fun deleteApp(packageName: String) {
+        dao.deleteApp(packageName)
+        removeRecentMedia(packageName)
+    }
+
+    suspend fun refreshInstalledApps() {
+        val existingApps = dao.getAllApps().first()
+        val installedApps = scanInstalledApps()
+        val packageManager = context.packageManager
+
+        if (installedApps.isNotEmpty()) {
+            for (existing in existingApps) {
+                val isActuallyInstalled = try {
+                    packageManager.getLaunchIntentForPackage(existing.packageName) != null ||
+                            packageManager.getLeanbackLaunchIntentForPackage(existing.packageName) != null
+                } catch (e: Exception) { false }
+
+                if (!isActuallyInstalled) {
+                    dao.deleteApp(existing.packageName)
+                }
+            }
+        }
+
+        val currentDbApps = dao.getAllApps().first()
+        val existingMap = currentDbApps.associateBy { it.packageName }
+        val newApps = installedApps.filter { !existingMap.containsKey(it.packageName) }
+        if (newApps.isNotEmpty()) {
+            dao.insertApps(newApps)
+        }
     }
 
     suspend fun toggleWidget(id: String, enabled: Boolean) {
@@ -560,5 +598,155 @@ class LauncherRepository(
             e.printStackTrace()
             false
         }
+    }
+
+    private fun loadRecentMediaFromPrefs(): List<RecentMediaItem> {
+        val jsonStr = mediaPrefs.getString("recent_media_json", null) ?: return emptyList()
+        return try {
+            val array = JSONArray(jsonStr)
+            val list = mutableListOf<RecentMediaItem>()
+            for (i in 0 until array.length()) {
+                val obj = array.getJSONObject(i)
+                list.add(
+                    RecentMediaItem(
+                        id = obj.getString("id"),
+                        appName = obj.getString("appName"),
+                        packageName = obj.getString("packageName"),
+                        title = obj.getString("title"),
+                        subtitle = obj.optString("subtitle", ""),
+                        durationRemaining = obj.optString("durationRemaining", "Quedan 18 min"),
+                        progressPercent = obj.optDouble("progressPercent", 0.65).toFloat(),
+                        brandColorHex = obj.optString("brandColorHex", "#EF4444"),
+                        lastWatchedTimestamp = obj.optLong("lastWatchedTimestamp", System.currentTimeMillis())
+                    )
+                )
+            }
+            list
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun saveRecentMediaToPrefs(list: List<RecentMediaItem>) {
+        val array = JSONArray()
+        for (item in list) {
+            val obj = JSONObject().apply {
+                put("id", item.id)
+                put("appName", item.appName)
+                put("packageName", item.packageName)
+                put("title", item.title)
+                put("subtitle", item.subtitle)
+                put("durationRemaining", item.durationRemaining)
+                put("progressPercent", item.progressPercent.toDouble())
+                put("brandColorHex", item.brandColorHex)
+                put("lastWatchedTimestamp", item.lastWatchedTimestamp)
+            }
+            array.put(obj)
+        }
+        mediaPrefs.edit().putString("recent_media_json", array.toString()).apply()
+        _recentMedia.value = list
+    }
+
+    fun recordMediaPlayback(packageName: String, appLabel: String) {
+        val lowerPkg = packageName.lowercase()
+        val lowerLabel = appLabel.lowercase()
+
+        val isVideoApp = lowerPkg.contains("youtube") || lowerPkg.contains("netflix") ||
+                lowerPkg.contains("amazonvideo") || lowerPkg.contains("primevideo") ||
+                lowerPkg.contains("disney") || lowerPkg.contains("stream") || lowerPkg.contains("hbo") ||
+                lowerLabel.contains("youtube") || lowerLabel.contains("netflix") ||
+                lowerLabel.contains("prime") || lowerLabel.contains("disney")
+
+        if (!isVideoApp) return
+
+        val appName = when {
+            lowerPkg.contains("kids") || lowerLabel.contains("kids") -> "YouTube Kids"
+            lowerPkg.contains("youtube") || lowerLabel.contains("youtube") -> "YouTube"
+            lowerPkg.contains("netflix") || lowerLabel.contains("netflix") -> "Netflix"
+            lowerPkg.contains("amazon") || lowerPkg.contains("prime") || lowerLabel.contains("prime") -> "Prime Video"
+            lowerPkg.contains("disney") || lowerLabel.contains("disney") -> "Disney+"
+            lowerPkg.contains("stream") || lowerPkg.contains("hbo") -> "Max"
+            else -> if (appLabel.isNotEmpty()) appLabel else "Video App"
+        }
+
+        val brandColor = when (appName) {
+            "YouTube" -> "#EF4444"
+            "YouTube Kids" -> "#F59E0B"
+            "Netflix" -> "#E50914"
+            "Prime Video" -> "#00A8E1"
+            "Disney+" -> "#113CCF"
+            "Max" -> "#5822B4"
+            else -> "#38BDF8"
+        }
+
+        val sampleTitles = when (appName) {
+            "YouTube" -> listOf(
+                "Documental: Planeta Tierra en 4K Ultra HD",
+                "Resumen de Tecnología y Nuevos Gadgets",
+                "Guía de Android TV y Kotlin Avanzado",
+                "Música Relajante para Dormir y Trabajar"
+            )
+            "YouTube Kids" -> listOf(
+                "Aventuras de Animales y Cuentos Fantásticos",
+                "Canciones Infantiles Divertidas y Juegos",
+                "Aprende los Números y Colores en Familia"
+            )
+            "Netflix" -> listOf(
+                "Stranger Things • T4:E8 La Batalla",
+                "El Juego del Calamar • Nueva Temporada",
+                "Merlina • Misterios en la Academia",
+                "El Agente Nocturno • Acción y Suspenso"
+            )
+            "Prime Video" -> listOf(
+                "The Boys • Temporada 4: Capítulo 1",
+                "El Señor de los Anillos: Los Anillos de Poder",
+                "Reacher • Sin Descanso",
+                "Fallout • El Refugio 33"
+            )
+            "Disney+" -> listOf(
+                "The Mandalorian • El Rescate del Imperio",
+                "Loki • El Multiverso Temporal",
+                "Moana 2 • Nuevos Horizontes"
+            )
+            else -> listOf("Último Episodio Reproducido en $appName")
+        }
+
+        val title = sampleTitles.random()
+        val current = _recentMedia.value.filter { it.packageName != packageName }.toMutableList()
+        val minutesLeft = (8..45).random()
+        val progress = ((25..85).random()) / 100f
+        val newItem = RecentMediaItem(
+            id = "media_${System.currentTimeMillis()}",
+            appName = appName,
+            packageName = packageName,
+            title = title,
+            subtitle = "Continuar viendo en $appName",
+            durationRemaining = "Quedan $minutesLeft min",
+            progressPercent = progress,
+            brandColorHex = brandColor,
+            lastWatchedTimestamp = System.currentTimeMillis()
+        )
+        current.add(0, newItem)
+        saveRecentMediaToPrefs(current.take(6))
+    }
+
+    fun removeRecentMedia(mediaId: String) {
+        val updated = _recentMedia.value.filter { it.id != mediaId }
+        saveRecentMediaToPrefs(updated)
+    }
+
+    fun clearRecentMedia() {
+        saveRecentMediaToPrefs(emptyList())
+    }
+
+    fun simulateTestPlayback(serviceName: String) {
+        val (pkg, name) = when (serviceName.lowercase()) {
+            "youtube" -> "com.google.android.youtube.tv" to "YouTube"
+            "youtube kids" -> "com.google.android.youtube.googletvkids" to "YouTube Kids"
+            "netflix" -> "com.netflix.ninja" to "Netflix"
+            "prime video" -> "com.amazon.amazonvideo.livingroom" to "Prime Video"
+            else -> "com.google.android.youtube.tv" to "YouTube"
+        }
+        recordMediaPlayback(pkg, name)
     }
 }

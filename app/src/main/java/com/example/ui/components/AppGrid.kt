@@ -5,6 +5,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -18,7 +19,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
@@ -26,12 +29,11 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Apps
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -56,14 +58,9 @@ import com.example.ui.theme.TvFocusBorder
 import kotlinx.coroutines.launch
 
 /**
- * AppGrid: Componente optimizado para Android TV y navegación fluida con D-Pad (control remoto).
- * 
- * Características clave para TV:
- * - LazyVerticalGrid con clipToPadding = false para evitar recortes de elevación y glow al escalar iconos.
- * - Auto-scroll inteligente: centra dinámicamente la fila enfocada para una visibilidad continua en la pantalla de TV.
- * - Columnas fijas o adaptables para movimientos 2D deterministas (arriba, abajo, izquierda, derecha).
- * - Intercepción de botones del control remoto (Enter/Dpad Center para abrir, Menú para opciones).
- * - Barra inferior de estado con pista de navegación para el mando a distancia (10-foot UI).
+ * AppGrid: Componente unificado y optimizado para Android TV y mando D-Pad.
+ * Desliza suavemente la pantalla completa (cabecera + accesos rápidos + pestañas + cuadrícula de apps)
+ * para garantizar visibilidad total y continua de todas las aplicaciones.
  */
 @Composable
 fun AppGrid(
@@ -71,36 +68,35 @@ fun AppGrid(
     onLaunchApp: (AppItem) -> Unit,
     onOpenMenu: (AppItem) -> Unit,
     modifier: Modifier = Modifier,
-    columnsCount: Int = 5,
+    columnsCount: Int = 6,
     gridState: LazyGridState = rememberLazyGridState(),
     emptyMessage: String = "No se encontraron aplicaciones en esta categoría",
-    emptySubMessage: String = "Usa el botón Menú del mando sobre cualquier app para moverla a esta pestaña"
+    emptySubMessage: String = "Usa el botón Menú del mando sobre cualquier app para moverla a esta pestaña",
+    headerContent: (@Composable () -> Unit)? = null
 ) {
-    val coroutineScope = rememberCoroutineScope()
     var focusedApp by remember { mutableStateOf<AppItem?>(null) }
     var focusedIndex by remember { mutableStateOf<Int?>(null) }
 
-    // Smart auto-scroll: when focused item changes, ensure its row is visible comfortably
+    // Smart auto-scroll: ensures focused app row is comfortably in view
     LaunchedEffect(focusedIndex) {
         focusedIndex?.let { index ->
+            val actualItemIndex = if (headerContent != null) index + 1 else index
             val layoutInfo = gridState.layoutInfo
             val visibleItems = layoutInfo.visibleItemsInfo
-            val itemInfo = visibleItems.firstOrNull { it.index == index }
+            val itemInfo = visibleItems.firstOrNull { it.index == actualItemIndex }
 
             if (itemInfo == null) {
-                // Not visible, scroll into view
-                gridState.animateScrollToItem(index)
+                gridState.animateScrollToItem(actualItemIndex)
             } else {
-                // If it is partially cut off at the bottom, scroll down to bring it fully into view
                 val viewportEnd = layoutInfo.viewportEndOffset - layoutInfo.afterContentPadding
-                if (itemInfo.offset.y + itemInfo.size.height > viewportEnd - 40) {
-                    gridState.animateScrollToItem(index)
+                if (itemInfo.offset.y + itemInfo.size.height > viewportEnd - 30) {
+                    gridState.animateScrollToItem(actualItemIndex)
                 }
             }
         }
     }
 
-    // Reset focused item if apps list changes or becomes empty
+    // Reset focused item if apps list changes
     LaunchedEffect(apps) {
         if (apps.isEmpty()) {
             focusedApp = null
@@ -116,83 +112,90 @@ fun AppGrid(
             .fillMaxSize()
             .testTag("app_grid_container")
     ) {
-        if (apps.isEmpty()) {
-            // Empty State
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(32.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(64.dp)
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Apps,
-                            contentDescription = null,
-                            tint = TvCyanAccent,
-                            modifier = Modifier.size(32.dp)
-                        )
-                    }
-                    Text(
-                        text = emptyMessage,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        textAlign = TextAlign.Center
-                    )
-                    Text(
-                        text = emptySubMessage,
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center
-                    )
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(columnsCount),
+            state = gridState,
+            modifier = Modifier
+                .fillMaxSize()
+                .onKeyEvent { keyEvent ->
+                    if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
+                        when (keyEvent.nativeKeyEvent.keyCode) {
+                            KeyEvent.KEYCODE_MENU, KeyEvent.KEYCODE_BUTTON_X, KeyEvent.KEYCODE_BUTTON_Y -> {
+                                focusedApp?.let {
+                                    onOpenMenu(it)
+                                    true
+                                } ?: false
+                            }
+                            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> {
+                                focusedApp?.let {
+                                    onLaunchApp(it)
+                                    true
+                                } ?: false
+                            }
+                            else -> false
+                        }
+                    } else false
+                }
+                .testTag("app_grid_lazy_vertical"),
+            contentPadding = PaddingValues(
+                start = 24.dp,
+                end = 24.dp,
+                top = 6.dp,
+                bottom = 72.dp
+            ),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            // Unified Top Header: Scrolls with the entire screen
+            if (headerContent != null) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    headerContent()
                 }
             }
-        } else {
-            // Main D-Pad Optimized LazyVerticalGrid
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(columnsCount),
-                state = gridState,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .onKeyEvent { keyEvent ->
-                        if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
-                            when (keyEvent.nativeKeyEvent.keyCode) {
-                                KeyEvent.KEYCODE_MENU, KeyEvent.KEYCODE_BUTTON_X, KeyEvent.KEYCODE_BUTTON_Y -> {
-                                    focusedApp?.let {
-                                        onOpenMenu(it)
-                                        true
-                                    } ?: false
-                                }
-                                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> {
-                                    focusedApp?.let {
-                                        onLaunchApp(it)
-                                        true
-                                    } ?: false
-                                }
-                                else -> false
+
+            if (apps.isEmpty()) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 48.dp, horizontal = 24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(56.dp)
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Apps,
+                                    contentDescription = null,
+                                    tint = TvCyanAccent,
+                                    modifier = Modifier.size(28.dp)
+                                )
                             }
-                        } else false
+                            Text(
+                                text = emptyMessage,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                textAlign = TextAlign.Center
+                            )
+                            Text(
+                                text = emptySubMessage,
+                                fontSize = 11.5.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center
+                            )
+                        }
                     }
-                    .testTag("app_grid_lazy_vertical"),
-                contentPadding = PaddingValues(
-                    start = 24.dp,
-                    end = 24.dp,
-                    top = 10.dp,
-                    bottom = 76.dp
-                ),
-                horizontalArrangement = Arrangement.spacedBy(18.dp),
-                verticalArrangement = Arrangement.spacedBy(18.dp)
-            ) {
+                }
+            } else {
                 itemsIndexed(
                     items = apps,
                     key = { _, item -> item.packageName }
@@ -215,111 +218,98 @@ fun AppGrid(
             }
         }
 
-        // TV Remote Navigation Feedback & Shortcut Hints Bar as non-intrusive bottom overlay
+        // TV Remote Navigation Feedback & Shortcut Hints Bar as non-intrusive floating pill
         AnimatedVisibility(
             visible = focusedApp != null && apps.isNotEmpty(),
             enter = fadeIn(animationSpec = tween(150)),
             exit = fadeOut(animationSpec = tween(150)),
-            modifier = Modifier.align(Alignment.BottomCenter)
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 8.dp)
         ) {
             focusedApp?.let { app ->
                 val currentIndex = (focusedIndex ?: 0) + 1
                 val totalCount = apps.size
 
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.94f))
-                        .border(
-                            width = 1.dp,
-                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)
-                        )
-                        .padding(horizontal = 24.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)),
+                    shadowElevation = 8.dp,
+                    modifier = Modifier.padding(horizontal = 24.dp)
                 ) {
-                    // Left: Current Focused App Info & Position
                     Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(TvCyanAccent.copy(alpha = 0.2f))
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(TvCyanAccent.copy(alpha = 0.2f))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = "$currentIndex / $totalCount",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TvCyanAccent
+                                )
+                            }
                             Text(
-                                text = "$currentIndex / $totalCount",
-                                fontSize = 11.sp,
+                                text = app.label,
+                                fontSize = 11.5.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = TvCyanAccent
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1
                             )
                         }
 
-                        Text(
-                            text = app.label,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.PlayArrow,
+                                    contentDescription = null,
+                                    tint = TvCyanAccent,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Text(
+                                    text = "OK: Abrir",
+                                    fontSize = 10.5.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
 
-                        Text(
-                            text = "• Categoría: ${app.categoryId}",
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-                    // Right: TV Remote Button Shortcuts
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(14.dp)
-                    ) {
-                        RemoteButtonHint(
-                            icon = Icons.Default.PlayArrow,
-                            buttonLabel = "ENTER / OK",
-                            actionLabel = "Abrir"
-                        )
-                        RemoteButtonHint(
-                            icon = Icons.Default.Menu,
-                            buttonLabel = "MENÚ",
-                            actionLabel = "Opciones"
-                        )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Menu,
+                                    contentDescription = null,
+                                    tint = Color(0xFFFBBF24),
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Text(
+                                    text = "Menú: Opciones / Anclar",
+                                    fontSize = 10.5.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
                     }
                 }
             }
         }
-    }
-}
-
-@Composable
-fun RemoteButtonHint(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    buttonLabel: String,
-    actionLabel: String
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(4.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant)
-                .padding(horizontal = 5.dp, vertical = 2.dp)
-        ) {
-            Text(
-                text = buttonLabel,
-                fontSize = 9.sp,
-                fontWeight = FontWeight.ExtraBold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        Text(
-            text = actionLabel,
-            fontSize = 10.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
     }
 }

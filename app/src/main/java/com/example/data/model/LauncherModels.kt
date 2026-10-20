@@ -77,3 +77,35 @@ data class CloudBackupPayload(
     val autoDarkMode: Boolean,
     val hiddenAppsPin: String
 )
+
+data class RecentMediaItem(
+    val id: String,
+    val appName: String,
+    val packageName: String,
+    val title: String,
+    val subtitle: String = "",
+    val durationRemaining: String = "Quedan 18 min",
+    val progressPercent: Float = 0.65f,
+    val brandColorHex: String = "#EF4444",
+    val lastWatchedTimestamp: Long = System.currentTimeMillis()
+)
+
+data class WeatherState(
+    val currentTemp: Int = 24,
+    val condition: String = "Lluvia dispersa",
+    val todayMin: Int = 17,
+    val todayMax: Int = 26,
+    val tomorrowMin: Int = 16,
+    val tomorrowMax: Int = 25,
+    val rainProbabilityPercent: Int = 65,
+    val rainStartHour: String = "14:00",
+    val rainEndHour: String = "18:30",
+    val isHighHeat: Boolean = false
+) {
+    val isRainAlertActive: Boolean
+        get() = rainProbabilityPercent > 49
+
+    // Alerta activa estrictamente si la temperatura es superior a 35°C
+    val isHeatAlertActive: Boolean
+        get() = currentTemp > 35 || todayMax > 35
+}
